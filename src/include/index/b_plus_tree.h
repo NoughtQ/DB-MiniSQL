@@ -40,7 +40,7 @@ class BPlusTree {
 
   // return the value associated with a given key
   bool GetValue(const GenericKey *key, std::vector<RowId> &result, Txn *transaction = nullptr);
-
+  
   IndexIterator Begin();
 
   IndexIterator Begin(const GenericKey *key);

@@ -10,23 +10,69 @@
 /**
  * TODO: Student Implement
  */
-BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager, const KeyManager &KM,
-                     int leaf_max_size, int internal_max_size)
+BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager, const KeyManager &KM, int leaf_max_size, int internal_max_size)
     : index_id_(index_id),
       buffer_pool_manager_(buffer_pool_manager),
       processor_(KM),
       leaf_max_size_(leaf_max_size),
-      internal_max_size_(internal_max_size) {
+      internal_max_size_(internal_max_size) 
+{
+  int key_size = KM.key_size_;
+  if(leaf_max_size == UNDEFINED_SIZE)
+  {
+    int pair_size = key_size + sizeof(RowId);
+    leaf_max_size_ = (PAGE_SIZE - LEAF_PAGE_HEADER_SIZE)/pair_size;
+  }
+  if(internal_max_size_ == UNDEFINED_SIZE)
+  {
+    int pair_size = key_size + sizeof(page_id_t);
+    internal_max_size_ = (PAGE_SIZE - INTERNAL_PAGE_HEADER_SIZE)/pair_size;
+  }
 }
 
 void BPlusTree::Destroy(page_id_t current_page_id) {
+  if (current_page_id == INVALID_PAGE_ID) {
+    return;
+  }
+
+  // Fetch the current page from buffer pool
+  Page* page = buffer_pool_manager_->FetchPage(current_page_id);
+  if (page == nullptr) {
+    return;  // Page not found or error occurred
+  }
+
+  BPlusTreePage* node = reinterpret_cast<BPlusTreePage*>(page->GetData());
+
+  if (!node->IsLeafPage()) {
+    // If it's an internal page, recursively destroy all child pages
+    InternalPage* internal_node = reinterpret_cast<InternalPage*>(node);
+    for (int i = 0; i < internal_node->GetSize(); ++i) {
+      Destroy(internal_node->ValueAt(i));
+    }
+  }
+
+  // Clean up the current page
+  buffer_pool_manager_->UnpinPage(current_page_id, false);
+  buffer_pool_manager_->DeletePage(current_page_id);
 }
 
 /*
  * Helper function to decide whether current b+tree is empty
  */
 bool BPlusTree::IsEmpty() const {
-  return false;
+  if (root_page_id_ == INVALID_PAGE_ID) {
+    return true;
+  }
+  Page* root_page = buffer_pool_manager_->FetchPage(root_page_id_);
+  if (root_page == nullptr) {
+    return true;
+  }
+
+  BPlusTreePage* root_page_data = reinterpret_cast<BPlusTreePage*>(root_page->GetData());
+  bool is_empty = (root_page_data->GetSize() == 0);
+  buffer_pool_manager_->UnpinPage(root_page_id_, false);
+
+  return is_empty;
 }
 
 /*****************************************************************************
@@ -37,7 +83,10 @@ bool BPlusTree::IsEmpty() const {
  * This method is used for point query
  * @return : true means key exists
  */
-bool BPlusTree::GetValue(const GenericKey *key, std::vector<RowId> &result, Txn *transaction) { return false; }
+bool BPlusTree::GetValue(const GenericKey *key, std::vector<RowId> &result, Txn *transaction) 
+{
+  return false; 
+}
 
 /*****************************************************************************
  * INSERTION
