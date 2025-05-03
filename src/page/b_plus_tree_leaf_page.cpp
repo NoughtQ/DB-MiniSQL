@@ -116,16 +116,15 @@ std::pair<GenericKey *, RowId> LeafPage::GetItem(int index) { return {KeyAt(inde
  * INSERTION
  *****************************************************************************/
 // auua: 额外规定，如果插入的key已经存在则返回-1
- /*
+/*
  * Insert key & value pair into leaf page ordered by key
  * @return page size after insertion
  */
 int LeafPage::Insert(GenericKey *key, const RowId &value, const KeyManager &KM) {
   int current_size = GetSize();
   int index = KeyIndex(key, KM);
-  if(KM.CompareKeys(KeyAt(index), key) == 0)
-    return -1;
-  
+  if (KM.CompareKeys(KeyAt(index), key) == 0) return -1;
+
   // insert to the tail has no need to memmove
   if (index < 0) {
     index = current_size;
@@ -138,8 +137,8 @@ int LeafPage::Insert(GenericKey *key, const RowId &value, const KeyManager &KM) 
   SetValueAt(index, value);
 
   // Update size and return new size
-  SetSize(current_size+1);
-  return current_size+1;
+  SetSize(current_size + 1);
+  return current_size + 1;
 }
 
 /*****************************************************************************
@@ -219,20 +218,27 @@ int LeafPage::RemoveAndDeleteRecord(const GenericKey *key, const KeyManager &KM)
 /*****************************************************************************
  * MERGE
  *****************************************************************************/
+// auua: 将本节点的键值对移动到recipient的后面
 /*
  * Remove all key & value pairs from this page to "recipient" page. Don't forget
  * to update the next_page id in the sibling page
  */
 void LeafPage::MoveAllTo(LeafPage *recipient) {
-  int data_size = GetSize() * pair_size;
-
-  if (data_size > 0) {
-    memcpy(recipient->data_, data_, data_size);
+  int size = GetSize();
+  // If nothing to move, just update the next page pointer
+  if (size == 0) {
+    recipient->SetNextPageId(GetNextPageId());
+    return;
   }
 
-  recipient->size_ = size_;
-  recipient->next_page_id_ = next_page_id_;
-  size_ = 0;
+  // Copy all items to the end of recipient
+  int recipient_size = recipient->GetSize();
+  memcpy(recipient->PairPtrAt(recipient_size), PairPtrAt(0), size * pair_size);
+
+  // Update sizes and pointers
+  recipient->IncreaseSize(size);
+  recipient->SetNextPageId(GetNextPageId());
+  SetSize(0);
 }
 
 /*****************************************************************************

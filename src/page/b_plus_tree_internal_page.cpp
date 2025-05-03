@@ -231,7 +231,8 @@ page_id_t InternalPage::RemoveAndReturnOnlyChild() {
 /*****************************************************************************
  * MERGE
  *****************************************************************************/
-/*
+// auua: 和叶子节点不同，内部节点合并是右边的并到左边的尾部
+ /*
  * Remove all of key & value pairs from this page to "recipient" page.
  * The middle_key is the separation key you should get from the parent. You need
  * to make sure the middle key is added to the recipient to maintain the invariant.
@@ -244,7 +245,7 @@ void InternalPage::MoveAllTo(InternalPage *recipient, GenericKey *middle_key, Bu
   // copy
   int move_num = GetSize();
   int dest_index = recipient->GetSize();
-  memcpy(recipient->PairPtrAt(dest_index), data_, move_num*pair_size);
+  memcpy(recipient->PairPtrAt(dest_index), PairPtrAt(0), move_num*pair_size);
   recipient->SetKeyAt(dest_index, middle_key);
   recipient->IncreaseSize(move_num);
 

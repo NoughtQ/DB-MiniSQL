@@ -87,11 +87,13 @@ class BPlusTree {
   bool Coalesce(LeafPage *&neighbor_node, LeafPage *&node, InternalPage *&parent, int index,
                 Txn *transaction = nullptr);
 
-  void Redistribute(LeafPage *neighbor_node, LeafPage *node, int index);
+  void Redistribute(LeafPage *neighbor_node, LeafPage *node, int index, InternalPage* parent);
 
-  void Redistribute(InternalPage *neighbor_node, InternalPage *node, int index);
+  void Redistribute(InternalPage *neighbor_node, InternalPage *node, int index, InternalPage* parent);
 
   bool AdjustRoot(BPlusTreePage *node);
+
+  void AdjustInternalRoot(InternalPage *root, BPlusTreePage *node);
 
   void UpdateRootPageId(int insert_record = 0);
 
