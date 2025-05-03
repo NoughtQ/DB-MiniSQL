@@ -538,31 +538,57 @@ void BPlusTree::AdjustInternalRoot(InternalPage *root, BPlusTreePage *node) {
  * index iterator
  * @return : index iterator
  */
-IndexIterator BPlusTree::Begin() { return IndexIterator(); }
+IndexIterator BPlusTree::Begin() { 
+  if (IsEmpty()) return IndexIterator();
+  Page *leaf_page = FindLeafPage(nullptr, root_page_id_, true);
+  LeafPage *leaf_node = reinterpret_cast<LeafPage*>(leaf_page->GetData());
+  page_id_t t_page_id = leaf_node->GetPageId();
+  buffer_pool_manager_->UnpinPage(t_page_id, true);
+  return IndexIterator(t_page_id, buffer_pool_manager_, 0); 
+}
 
+// auua: 'low key' 似乎是范围查询的下界，所以找到对应leaf_node，然后通过KeyIndex()返回了第一个大于等于它的index
 /*
  * Input parameter is low key, find the leaf page that contains the input key
  * first, then construct index iterator
  * @return : index iterator
  */
-IndexIterator BPlusTree::Begin(const GenericKey *key) { return IndexIterator(); }
+IndexIterator BPlusTree::Begin(const GenericKey *key) { 
+  if (IsEmpty()) return IndexIterator();
+  Page *leaf_page = FindLeafPage(key, root_page_id_, false);
+  LeafPage *leaf_node = reinterpret_cast<LeafPage*>(leaf_page->GetData());
+  page_id_t t_page_id = leaf_node->GetPageId();
+  int index = leaf_node->KeyIndex(key);
+  buffer_pool_manager_->UnpinPage(t_page_id, true);
+  return IndexIterator(t_page_id, buffer_pool_manager_, index); 
+}
 
+// auua: 我感觉这个设计很不合常理，end()不应该是个空值吗...
 /*
  * Input parameter is void, construct an index iterator representing the end
  * of the key/value pair in the leaf node
  * @return : index iterator
  */
-IndexIterator BPlusTree::End() { return IndexIterator(); }
+IndexIterator BPlusTree::End() { 
+  if (IsEmpty()) return IndexIterator();
+  Page *leaf_page = FindLeafPage(key, root_page_id_, false, true);
+  LeafPage *leaf_node = reinterpret_cast<LeafPage*>(leaf_page->GetData());
+  page_id_t t_page_id = leaf_node->GetPageId();
+  int index = leaf_node->GetSize()-1;
+  buffer_pool_manager_->UnpinPage(t_page_id, true);
+  return IndexIterator(t_page_id, buffer_pool_manager_, index); 
+}
 
 /*****************************************************************************
  * UTILITIES AND DEBUG
  *****************************************************************************/
-/*
+// auua: 不能复用rightMost实在是有些可惜，所以补一下
+ /*
  * Find leaf page containing particular key, if leftMost flag == true, find
  * the left most leaf page
  * Note: the leaf page is pinned, you need to unpin it after use.
  */
-Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool leftMost) {
+Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool leftMost, bool rightMost) {
   // Find the appropriate leaf page
   page_id_t current_page_id = page_id;
   Page *current_page = nullptr;
@@ -582,10 +608,12 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
       InternalPage *internal_node = reinterpret_cast<InternalPage *>(current_node);
 
       page_id_t next_page_id;
-      if (!leftMost)
+      if (!(leftMost|rightMost))
         next_page_id = internal_node->Lookup(key, processor_);
-      else
+      else if(leftMost)
         next_page_id = internal_node->ValueAt(0);
+      else
+        next_page_id = internal_node->ValueAt(internal_node->GetSize() - 1);
 
       buffer_pool_manager_->UnpinPage(current_page_id, false);
       current_page_id = next_page_id;
