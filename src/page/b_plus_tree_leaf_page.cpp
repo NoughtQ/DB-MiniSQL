@@ -71,7 +71,7 @@ int LeafPage::KeyIndex(const GenericKey *key, const KeyManager &KM) {
 
     if (cmp < 0) {
       left = mid + 1;
-    } else if(cmp > 0){
+    } else if (cmp > 0) {
       right = mid - 1;
     } else {
       return mid;
@@ -115,24 +115,31 @@ std::pair<GenericKey *, RowId> LeafPage::GetItem(int index) { return {KeyAt(inde
 /*****************************************************************************
  * INSERTION
  *****************************************************************************/
-/*
+// auua: 额外规定，如果插入的key已经存在则返回-1
+ /*
  * Insert key & value pair into leaf page ordered by key
  * @return page size after insertion
  */
 int LeafPage::Insert(GenericKey *key, const RowId &value, const KeyManager &KM) {
+  int current_size = GetSize();
   int index = KeyIndex(key, KM);
-  if (index < 0) index = GetSize();
-
-  // Shift elements to make space for new pair
-  memmove(PairPtrAt(index + 1), PairPtrAt(index), (GetSize() - index) * pair_size);
+  if(KM.CompareKeys(KeyAt(index), key) == 0)
+    return -1;
+  
+  // insert to the tail has no need to memmove
+  if (index < 0) {
+    index = current_size;
+  } else {
+    memmove(PairPtrAt(index + 1), PairPtrAt(index), (current_size - index) * pair_size);
+  }
 
   // Insert new key-value pair
   SetKeyAt(index, key);
   SetValueAt(index, value);
 
   // Update size and return new size
-  IncreaseSize(1);
-  return GetSize();
+  SetSize(current_size+1);
+  return current_size+1;
 }
 
 /*****************************************************************************
@@ -144,29 +151,28 @@ int LeafPage::Insert(GenericKey *key, const RowId &value, const KeyManager &KM) 
  * Remove half of key & value pairs from this page to "recipient" page
  */
 void LeafPage::MoveHalfTo(LeafPage *recipient) {
-  int start_index = GetSize() / 2;
-  int num_items = GetSize() - start_index;
+  int current_size = GetSize();
+  if (current_size <= 1) return;
+
+  int start_index = current_size / 2;
+  int num_items = current_size - start_index;
 
   // Copy items to recipient
   recipient->CopyNFrom(PairPtrAt(start_index), num_items);
 
   // Update size (recipient->size change in CopyNfrom())
-  IncreaseSize(-num_items);
+  SetSize(current_size - num_items);
 }
 
-//auua:直接插入到了最后面，不过是不是应该看是插入到前面还是后面（
+// auua:直接插入到了最后面，不过是不是应该看是插入到前面还是后面（
 /*
  * Copy starting from items, and copy {size} number of elements into me.
  */
 void LeafPage::CopyNFrom(void *src, int size) {
-  ASSERT(size > 0, "Cannot copy zero or negative elements");
   ASSERT(GetSize() + size <= GetMaxSize(), "Exceeds page capacity");
 
   void *dest = PairPtrAt(GetSize());
-
-  // Perform bulk copy
   PairCopy(dest, src, size);
-
   IncreaseSize(size);
 }
 

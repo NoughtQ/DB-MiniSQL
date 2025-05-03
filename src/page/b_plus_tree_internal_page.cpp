@@ -154,19 +154,21 @@ int InternalPage::InsertNodeAfter(const page_id_t &old_value, GenericKey *new_ke
 /*****************************************************************************
  * SPLIT
  *****************************************************************************/
-/*
+// auua: 移动后一半
+ /*
  * Remove half of key & value pairs from this page to "recipient" page
  * buffer_pool_manager 是干嘛的？传给CopyNFrom()用于Fetch数据页
  */
 void InternalPage::MoveHalfTo(InternalPage *recipient, BufferPoolManager *buffer_pool_manager) {
-  int original_size = GetSize();
-  int split_index = original_size / 2;
+  int current_size = GetSize();
+  if (current_size <= 1) return;
 
-  // Calculate number of entries to move (all from split_index to end)
-  int move_num = original_size - split_index;
+  // Calculate split point (round down)
+  int split_index = current_size / 2;
+  int move_count = current_size - split_index;
 
-  // Copy the entries to recipient
-  CopyNFrom(PairPtrAt(split_index), move_num, buffer_pool_manager);
+  // Copy the latter half of entries to recipient
+  recipient->CopyNFrom(PairPtrAt(split_index), move_count, buffer_pool_manager);
 
   SetSize(split_index);
 }
@@ -181,6 +183,7 @@ void InternalPage::MoveHalfTo(InternalPage *recipient, BufferPoolManager *buffer
  */
 void InternalPage::CopyNFrom(void *src, int size, BufferPoolManager *buffer_pool_manager) {
   if (size <= 0) return;
+  ASSERT(GetSize() + size <= GetMaxSize(), "Exceeds page capacity");
   
   int dest_index = GetSize();
   memcpy(PairPtrAt(dest_index), src, size * pair_size);
