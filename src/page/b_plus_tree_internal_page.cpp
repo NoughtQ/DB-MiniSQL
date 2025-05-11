@@ -19,11 +19,12 @@
  * max page size
  */
 void InternalPage::Init(page_id_t page_id, page_id_t parent_id, int key_size, int max_size) {
-  page_type_ = IndexPageType::INTERNAL_PAGE;
-  page_id_ = page_id;
-  parent_page_id_ = parent_id;
-  key_size_ = key_size;
-  max_size_ = max_size;
+  SetPageType(IndexPageType::INTERNAL_PAGE);
+  SetPageId(page_id);
+  SetParentPageId(parent_id);
+  SetSize(0);
+  SetKeySize(key_size);
+  SetMaxSize(max_size);
 }
 
 /*
@@ -215,7 +216,7 @@ void InternalPage::CopyNFrom(void *src, int size, BufferPoolManager *buffer_pool
 void InternalPage::Remove(int index) {
   //if not the last one
   if(index < GetSize()-1)
-    memmove(PairPtrAt(index), PairPtrAt(index+1), (GetSize()-index-1)*pair_size());
+    memmove(PairPtrAt(index), PairPtrAt(index+1), (GetSize()-index-1)*pair_size);
   IncreaseSize(-1);
 }
 
@@ -251,7 +252,7 @@ void InternalPage::MoveAllTo(InternalPage *recipient, GenericKey *middle_key, Bu
 
   // change parent id
   page_id_t parent_id = recipient->GetPageId();
-  for(int i=0; i<move_num, i++)
+  for(int i=0; i<move_num; i++)
   {
     page_id_t child_page_id = ValueAt(i);
     auto *child_page = buffer_pool_manager->FetchPage(child_page_id);

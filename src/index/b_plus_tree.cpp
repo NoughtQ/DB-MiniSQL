@@ -298,13 +298,13 @@ void BPlusTree::InsertIntoParent(BPlusTreePage *old_node, GenericKey *key, BPlus
   new_node->SetParentPageId(parent_id);
 
   // Check if parent needs to be split
-  if (parent_node->GetSize() > parent->GetMaxSize()) {
+  if (parent_node->GetSize() > parent_node->GetMaxSize()) {
     InternalPage *new_parent_node = Split(parent_node, transaction);
 
     // Recursively insert into parent's parent
     InsertIntoParent(parent_node, new_parent_node->KeyAt(0), new_parent_node, transaction);
   }
-  buffer_pool_manager_->UnpinPage(parent_id);
+  buffer_pool_manager_->UnpinPage(parent_id, true);
 }
 
 /*****************************************************************************
@@ -489,10 +489,10 @@ void BPlusTree::Redistribute(LeafPage *neighbor_node, LeafPage *node, int index,
 
 void BPlusTree::Redistribute(InternalPage *neighbor_node, InternalPage *node, int index, InternalPage *parent) {
   if (index == 0) {
-    neighbor_node->MoveFirstToEndOf(node, parent->KeyAt(1));
-    parent->SetKeyAt(1, neighbor_node->KeyAt(0))
+    neighbor_node->MoveFirstToEndOf(node, parent->KeyAt(1),buffer_pool_manager_);
+    parent->SetKeyAt(1, neighbor_node->KeyAt(0));
   } else {
-    neighbor_node->MoveLastToFrontOf(node, parent->KeyAt(index));
+    neighbor_node->MoveLastToFrontOf(node, parent->KeyAt(index),buffer_pool_manager_);
     parent->SetKeyAt(index, node->KeyAt(0));
   }
 }
@@ -558,7 +558,7 @@ IndexIterator BPlusTree::Begin(const GenericKey *key) {
   Page *leaf_page = FindLeafPage(key, root_page_id_, false);
   LeafPage *leaf_node = reinterpret_cast<LeafPage*>(leaf_page->GetData());
   page_id_t t_page_id = leaf_node->GetPageId();
-  int index = leaf_node->KeyIndex(key);
+  int index = leaf_node->KeyIndex(key, processor_);
   buffer_pool_manager_->UnpinPage(t_page_id, true);
   return IndexIterator(t_page_id, buffer_pool_manager_, index); 
 }
@@ -571,7 +571,7 @@ IndexIterator BPlusTree::Begin(const GenericKey *key) {
  */
 IndexIterator BPlusTree::End() { 
   if (IsEmpty()) return IndexIterator();
-  Page *leaf_page = FindLeafPage(key, root_page_id_, false, true);
+  Page *leaf_page = FindLeafPage(nullptr, root_page_id_, false, true);
   LeafPage *leaf_node = reinterpret_cast<LeafPage*>(leaf_page->GetData());
   page_id_t t_page_id = leaf_node->GetPageId();
   int index = leaf_node->GetSize()-1;
@@ -629,7 +629,7 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
  * insert a record <index_name, current_page_id> into header page instead of
  * updating it.
  */
-void BPlusTree::UpdateRootPageId(bool insert_record) {
+void BPlusTree::UpdateRootPageId(int insert_record) {
   // Fetch the header page
   Page *header_page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
   if (header_page == nullptr) {

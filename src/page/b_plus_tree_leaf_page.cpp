@@ -23,12 +23,12 @@
  * 未初始化next_page_id
  */
 void LeafPage::Init(page_id_t page_id, page_id_t parent_id, int key_size, int max_size) {
-  page_type_ = IndexPageType::LEAF_PAGE;
-  page_id_ = page_id;
-  parent_page_id_ = parent_id;
-  size_ = 0;
-  max_size_ = max_size;
-  key_size_ = key_size;
+  SetPageType(IndexPageType::LEAF_PAGE);
+  SetPageId(page_id);
+  SetParentPageId(parent_id);
+  SetSize(0);
+  SetKeySize(key_size);
+  SetMaxSize(max_size);
 }
 
 /**
