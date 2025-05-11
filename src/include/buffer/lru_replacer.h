@@ -37,6 +37,9 @@ class LRUReplacer : public Replacer {
 
 private:
   // add your own private member variables here
+  list<frame_id_t> lru_list_;  // 双向链表存储LRU队列
+  unordered_map<frame_id_t, list<frame_id_t>::iterator> lru_map_;  // 哈希表存储LRU队列中的元素及其对应的迭代器
+  size_t max_size_;  // 最大容量
 };
 
 #endif  // MINISQL_LRU_REPLACER_H
