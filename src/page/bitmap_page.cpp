@@ -39,10 +39,21 @@ bool BitmapPage<PageSize>::AllocatePage(uint32_t &page_offset) {
  */
 template <size_t PageSize>
 bool BitmapPage<PageSize>::DeAllocatePage(uint32_t page_offset) {
+  /* 检查页面偏移是否有效 */
+  if (page_offset >= GetMaxSupportedSize()) {
+    return false;
+  }
+
+  /* 检查页面是否已经被释放 */
+  if (IsPageFree(page_offset)) {
+    return false;
+  }
+
   /* 更新位图 */
   uint32_t byte_index = page_offset / 8;
   uint8_t bit_index = page_offset % 8;
   bytes[byte_index] &= ~(1 << bit_index);
+
   /* 更新下一个可用的页面 */
   if(next_free_page_ == INVALID_PAGE){
     next_free_page_ = page_offset;

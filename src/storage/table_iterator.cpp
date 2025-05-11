@@ -99,5 +99,5 @@ TableIterator &TableIterator::operator++() {
 TableIterator TableIterator::operator++(int) {
     TableIterator temp(*this);
     ++(*this);
-    return temp;
+    return TableIterator(temp);
 }
