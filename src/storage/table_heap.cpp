@@ -3,7 +3,56 @@
 /**
  * TODO: Student Implement
  */
-bool TableHeap::InsertTuple(Row &row, Txn *txn) { return false; }
+bool TableHeap::InsertTuple(Row &row, Txn *txn) {
+    // 获取第一个页面
+    auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(first_page_id_));
+    if (page == nullptr) {
+        LOG(ERROR) << "Failed to fetch page " << first_page_id_ << std::endl;
+        return false;
+    }
+
+    // 尝试在现有页面中插入
+    page->WLatch();
+    bool insert_success = page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
+    page->WUnlatch();
+
+    // 如果当前页面插入失败，尝试在后续页面中插入
+    while (!insert_success && page->GetNextPageId() != INVALID_PAGE_ID) {
+        page_id_t next_page_id = page->GetNextPageId();
+        buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+        page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(next_page_id));
+        if (page == nullptr) {
+            LOG(ERROR) << "Failed to fetch page " << next_page_id << std::endl;
+            return false;
+        }
+        page->WLatch();
+        insert_success = page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
+        page->WUnlatch();
+    }
+
+    if (insert_success) {
+        buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
+    } else {
+        // 如果所有现有页面都已满，创建新页面
+        page_id_t new_page_id;
+        auto new_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->NewPage(new_page_id));
+        if (new_page == nullptr) {
+            buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+            LOG(ERROR) << "Failed to create new page while insert" << std::endl;
+            return false;
+        }
+        new_page->Init(new_page_id, page->GetTablePageId(), log_manager_, txn);
+        page->SetNextPageId(new_page_id);
+
+        new_page->WLatch();
+        insert_success = new_page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
+        new_page->WUnlatch();
+
+        buffer_pool_manager_->UnpinPage(new_page_id, true);
+    }
+
+    return insert_success;
+}
 
 bool TableHeap::MarkDelete(const RowId &rid, Txn *txn) {
   // Find the page which contains the tuple.
@@ -23,14 +72,61 @@ bool TableHeap::MarkDelete(const RowId &rid, Txn *txn) {
 /**
  * TODO: Student Implement
  */
-bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) { return false; }
+bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) {
+    // 获取包含要更新元组的页面
+    auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(rid.GetPageId()));
+    if (page == nullptr) {
+        LOG(ERROR) << "Failed to fetch page " << rid.GetPageId() << std::endl;
+        return false;
+    }
+
+    // 获取旧元组
+    Row old_row(rid);
+    page->WLatch();
+    bool valid = false;
+    bool update_success = page->UpdateTuple(row, &old_row, schema_, valid, txn, lock_manager_, log_manager_);
+    page->WUnlatch();
+
+    // 如果更新失败且有效（空间不足），需要删除旧元组并插入新元组
+    if (!update_success && valid) {
+        // 标记删除旧元组
+        if (MarkDelete(rid, txn)) {
+            // 尝试插入新元组
+            if (InsertTuple(row, txn)) {
+                // 应用删除旧元组
+                ApplyDelete(rid, txn);
+                buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
+                return true;
+            }
+            // 如果插入失败，回滚删除标记
+            RollbackDelete(rid, txn);
+        } else {
+            LOG(ERROR) << "Failed to mark delete old tuple" << std::endl;
+        }
+    } else {
+        LOG(ERROR) << "Invalid args while updating" << std::endl;
+    }
+
+    buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
+    return update_success;
+}
 
 /**
  * TODO: Student Implement
  */
 void TableHeap::ApplyDelete(const RowId &rid, Txn *txn) {
-  // Step1: Find the page which contains the tuple.
-  // Step2: Delete the tuple from the page.
+    // Step1: Find the page which contains the tuple.
+    auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(rid.GetPageId()));
+    if (page == nullptr) {
+        LOG(ERROR) << "Failed to fetch page when ApplyDelete: " << rid.GetPageId() << std::endl;
+        return;
+    }
+
+    // Step2: Delete the tuple from the page.
+    page->WLatch();
+    page->ApplyDelete(rid, txn, log_manager_);
+    page->WUnlatch();
+    buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
 }
 
 void TableHeap::RollbackDelete(const RowId &rid, Txn *txn) {
@@ -47,7 +143,22 @@ void TableHeap::RollbackDelete(const RowId &rid, Txn *txn) {
 /**
  * TODO: Student Implement
  */
-bool TableHeap::GetTuple(Row *row, Txn *txn) { return false; }
+bool TableHeap::GetTuple(Row *row, Txn *txn) {
+    // 获取包含元组的页面
+    auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(row->GetRowId().GetPageId()));
+    if (page == nullptr) {
+        LOG(ERROR) << "Failed to fetch page when GetTuple" << row->GetRowId().GetPageId() << std::endl;
+        return false;
+    }
+
+    // 获取元组数据
+    page->WLatch();
+    bool get_success = page->GetTuple(row, schema_, txn, lock_manager_);
+    page->WUnlatch();
+
+    buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+    return get_success;
+}
 
 void TableHeap::DeleteTable(page_id_t page_id) {
   if (page_id != INVALID_PAGE_ID) {
@@ -64,9 +175,50 @@ void TableHeap::DeleteTable(page_id_t page_id) {
 /**
  * TODO: Student Implement
  */
-TableIterator TableHeap::Begin(Txn *txn) { return TableIterator(nullptr, RowId(), nullptr); }
+TableIterator TableHeap::Begin(Txn *txn) {
+    // 获取第一个页面
+    auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(first_page_id_));
+    if (page == nullptr) {
+        LOG(ERROR) << "Failed to fetch page when get Begin iterator(a): " << first_page_id_ << std::endl;
+        return End();
+    }
+
+    // 初始化迭代器
+    page->RLatch();
+    RowId rid;
+    // 获取页面中第一个有效的元组
+    if (page->GetFirstTupleRid(&rid)) {
+        page->RUnlatch();
+        buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+        return TableIterator(this, rid, txn);
+    }
+
+    // 如果当前页面没有有效元组，尝试在后续页面中查找
+    while (page->GetNextPageId() != INVALID_PAGE_ID) {
+        page_id_t next_page_id = page->GetNextPageId();
+        page->RUnlatch();
+        buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+        page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(next_page_id));
+        if (page == nullptr) {
+            LOG(ERROR) << "Failed to fetch page when get Begin iterator(b): " << next_page_id << std::endl;
+            return End();
+        }
+        page->RLatch();
+        if (page->GetFirstTupleRid(&rid)) {
+            page->RUnlatch();
+            buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+            return TableIterator(this, rid, txn);
+        }
+    }
+
+    // 如果没有找到有效元组，返回End迭代器
+    page->RUnlatch();
+    buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+    LOG(ERROR) << "Failed to find a valid tuple when get Begin iterator" << std::endl;
+    return End();
+}
 
 /**
  * TODO: Student Implement
  */
-TableIterator TableHeap::End() { return TableIterator(nullptr, RowId(), nullptr); }
+TableIterator TableHeap::End() { return TableIterator(this, RowId(INVALID_PAGE_ID, 0), nullptr); }

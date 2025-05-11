@@ -59,13 +59,14 @@ bool TablePage::MarkDelete(const RowId &rid, Txn *txn, LockManager *lock_manager
   return true;
 }
 
-bool TablePage::UpdateTuple(Row &new_row, Row *old_row, Schema *schema, Txn *txn, LockManager *lock_manager,
+bool TablePage::UpdateTuple(Row &new_row, Row *old_row, Schema *schema, bool &valid, Txn *txn, LockManager *lock_manager,
                             LogManager *log_manager) {
   ASSERT(old_row != nullptr && old_row->GetRowId().Get() != INVALID_ROWID.Get(), "invalid old row.");
   uint32_t serialized_size = new_row.GetSerializedSize(schema);
   ASSERT(serialized_size > 0, "Can not have empty row.");
   uint32_t slot_num = old_row->GetRowId().GetSlotNum();
   // If the slot number is invalid, abort.
+  valid = false;
   if (slot_num >= GetTupleCount()) {
     return false;
   }
@@ -75,6 +76,7 @@ bool TablePage::UpdateTuple(Row &new_row, Row *old_row, Schema *schema, Txn *txn
     return false;
   }
   // If there is not enough space to update, we need to update via delete followed by an insert (not enough space).
+  valid = true;
   if (GetFreeSpaceRemaining() + tuple_size < serialized_size) {
     return false;
   }

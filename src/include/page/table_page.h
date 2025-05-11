@@ -49,7 +49,8 @@ class TablePage : public Page {
 
   bool MarkDelete(const RowId &rid, Txn *txn, LockManager *lock_manager, LogManager *log_manager);
 
-  bool UpdateTuple(Row &new_row, Row *old_row, Schema *schema, Txn *txn, LockManager *lock_manager,
+  // valid 表示上层传入的信息是否合法，当更新的元组放不下时要用到
+  bool UpdateTuple(Row &new_row, Row *old_row, Schema *schema, bool &valid, Txn *txn, LockManager *lock_manager,
                    LogManager *log_manager);
 
   void ApplyDelete(const RowId &rid, Txn *txn, LogManager *log_manager);
