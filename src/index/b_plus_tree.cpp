@@ -439,8 +439,10 @@ bool BPlusTree::Coalesce(LeafPage *&neighbor_node, LeafPage *&node, InternalPage
   right_node->MoveAllTo(left_node);
 
   // Remove the right node from parent and delete it
+  page_id_t old_page_id = right_node->GetPageId();
   parent->Remove(node_is_left ? index + 1 : index);
-  buffer_pool_manager_->DeletePage(right_node->GetPageId());
+  buffer_pool_manager_->UnpinPage(old_page_id, false);
+  buffer_pool_manager_->DeletePage(old_page_id);
 
   // Check if parent needs further adjustment
   return CoalesceOrRedistribute(parent, transaction);
@@ -460,8 +462,10 @@ bool BPlusTree::Coalesce(InternalPage *&neighbor_node, InternalPage *&node, Inte
   right_node->MoveAllTo(left_node, separator_key, buffer_pool_manager_);
 
   // Remove the right node from parent and delete it
+  page_id_t old_page_id = right_node->GetPageId();
   parent->Remove(node_is_left ? index + 1 : index);
-  buffer_pool_manager_->DeletePage(right_node->GetPageId());
+  buffer_pool_manager_->Unpin(old_page_id);
+  buffer_pool_manager_->DeletePage(old_page_id);
 
   // Check if parent needs further adjustment
   return CoalesceOrRedistribute(parent, transaction);
@@ -510,8 +514,10 @@ void BPlusTree::Redistribute(InternalPage *neighbor_node, InternalPage *node, in
 bool BPlusTree::AdjustRoot(BPlusTreePage *old_root_node) {
   // Case 2: Empty tree - delete the root
   if (old_root_node->IsLeafPage() && old_root_node->GetSize() == 0) {
+    page_id_t old_page_id = old_root_node->GetPageId();
     root_page_id_ = INVALID_PAGE_ID;
-    buffer_pool_manager_->DeletePage(old_root_node->GetPageId());
+    buffer_pool_manager_->UnpinPage(old_page_id,false);
+    buffer_pool_manager_->DeletePage(old_page_id);
     UpdateRootPageId(true);
     return true;
   }
@@ -525,7 +531,9 @@ bool BPlusTree::AdjustRoot(BPlusTreePage *old_root_node) {
 // auua: 这是我新增的辅助函数，用处就是让root被删，让node成为新的root
 void BPlusTree::AdjustInternalRoot(InternalPage *root, BPlusTreePage *node) {
   root_page_id_ = node->GetPageId();
-  buffer_pool_manager_->DeletePage(root->GetPageId());
+  page_id_t old_page_id = root->GetPageId();
+  buffer_pool_manager_->UnpinPage(old_page_id, false)
+  buffer_pool_manager_->DeletePage(old_page_id);
   node->SetParentPageId(INVALID_PAGE_ID);
   UpdateRootPageId(true);
 }
