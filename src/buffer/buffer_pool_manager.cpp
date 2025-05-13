@@ -37,6 +37,9 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
   if (it != page_table_.end()) {
     // 1.1
     Page *page = &pages_[it->second]; // pages_[frame_id]
+    if (page->pin_count_ == 0) {
+      replacer_->Pin(it->second);
+    }
     page->pin_count_++;
     return page;
   } else {
@@ -122,13 +125,14 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) {
   frame_id_t frame_id = it->second;
   Page *page = &pages_[frame_id];
   if(page->pin_count_ != 0) {
+    LOG(ERROR) << "Unable to delete page " << page_id << ": pin count = " << page->pin_count_ << endl;
     return false;
   }
+  replacer_->Pin(frame_id);  // 需要将其从 replacer 中删除
   page_table_.erase(page_id);  // 删除元信息
   page->page_id_ = INVALID_PAGE_ID;
   page->is_dirty_ = false;
   page->pin_count_ = 0;
-  page->ResetMemory();
   free_list_.push_back(frame_id);  // 释放内存
   DeallocatePage(page_id);
   return true;
@@ -144,6 +148,7 @@ bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
     }
     frame_id_t frame_id = it->second;
     Page *page = &pages_[frame_id];
+    // LOG(INFO) << "Unpin page: " << page_id << ", pin count: " << page->pin_count_ << endl;
     if(page->pin_count_ == 0) {
         LOG(ERROR) << "Unable to unpin page " << page_id << ": pin count = " << page->pin_count_ << endl;
         return false;

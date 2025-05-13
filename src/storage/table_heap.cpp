@@ -43,6 +43,7 @@ bool TableHeap::InsertTuple(Row &row, Txn *txn) {
         }
         new_page->Init(new_page_id, page->GetTablePageId(), log_manager_, txn);
         page->SetNextPageId(new_page_id);
+        buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
 
         new_page->WLatch();
         insert_success = new_page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
@@ -59,6 +60,7 @@ bool TableHeap::MarkDelete(const RowId &rid, Txn *txn) {
   auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(rid.GetPageId()));
   // If the page could not be found, then abort the recovery.
   if (page == nullptr) {
+    LOG(ERROR) << "Failed to fetch page " << rid.GetPageId() << std::endl;
     return false;
   }
   // Otherwise, mark the tuple as deleted.
@@ -80,7 +82,7 @@ bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) {
         return false;
     }
 
-    // 获取旧元组
+    // 尝试在现有页面中更新
     Row old_row(rid);
     page->WLatch();
     bool valid = false;
@@ -93,17 +95,14 @@ bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) {
         if (MarkDelete(rid, txn)) {
             // 尝试插入新元组
             if (InsertTuple(row, txn)) {
-                // 应用删除旧元组
-                ApplyDelete(rid, txn);
                 buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
                 return true;
             }
-            // 如果插入失败，回滚删除标记
-            RollbackDelete(rid, txn);
+            LOG(ERROR) << "Failed to insert new tuple" << std::endl;
         } else {
             LOG(ERROR) << "Failed to mark delete old tuple" << std::endl;
         }
-    } else {
+    } else if (!update_success) {
         LOG(ERROR) << "Invalid args while updating" << std::endl;
     }
 
@@ -152,9 +151,9 @@ bool TableHeap::GetTuple(Row *row, Txn *txn) {
     }
 
     // 获取元组数据
-    page->WLatch();
+    page->RLatch();
     bool get_success = page->GetTuple(row, schema_, txn, lock_manager_);
-    page->WUnlatch();
+    page->RUnlatch();
 
     buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
     return get_success;
