@@ -8,19 +8,10 @@
  */
 TableIterator::TableIterator(TableHeap *table_heap, RowId rid, Txn *txn) : table_heap_(table_heap), rid_(rid), txn_(txn) {
     row_ = new Row(rid);
-    if (table_heap_ != nullptr && rid_.GetPageId() == INVALID_PAGE_ID) {
-        // 初始化迭代器，获取第一个页面的第一个元组
-        auto page = reinterpret_cast<TablePage *>(table_heap_->buffer_pool_manager_->FetchPage(table_heap_->first_page_id_));
-        if (page != nullptr) {
-            page->GetFirstTupleRid(&rid_);
-            row_->SetRowId(rid_);
-            table_heap_->buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
-        } else {
-            LOG(ERROR) << "Failed to fetch page when initializing TableIterator: " << table_heap_->first_page_id_ << std::endl;
-        }
-    }
     if (rid_.GetPageId() != INVALID_PAGE_ID) {
+        // LOG(INFO) << "TableIterator initialized with rid: " << rid_.GetPageId() << " " << rid_.GetSlotNum() << std::endl;
         table_heap_->GetTuple(row_, txn_);
+        // LOG(INFO) << "Row info: " << row_->GetFieldCount() << std::endl;
     }
 }
 
@@ -86,6 +77,7 @@ TableIterator &TableIterator::operator++() {
             }
         }
         if (rid_.GetPageId() != INVALID_PAGE_ID) { // 读取下一个元组
+            row_->destroy();
             table_heap_->GetTuple(row_, txn_);
         }
     } else {

@@ -93,11 +93,11 @@ TEST(TableHeapTest, TableHeapDeleteTest) {
   ASSERT_TRUE(table_heap->MarkDelete(row_ids[0], nullptr));
   ASSERT_TRUE(table_heap->MarkDelete(row_ids[2], nullptr));
   
-  // 验证标记删除后仍可以读取数据
+  // 验证标记删除后不能读取数据
   Row row1(row_ids[0]);
-  ASSERT_TRUE(table_heap->GetTuple(&row1, nullptr));
+  ASSERT_FALSE(table_heap->GetTuple(&row1, nullptr));
   Row row2(row_ids[2]);
-  ASSERT_TRUE(table_heap->GetTuple(&row2, nullptr));
+  ASSERT_FALSE(table_heap->GetTuple(&row2, nullptr));
   
   // 应用删除
   table_heap->ApplyDelete(row_ids[0], nullptr);
@@ -112,6 +112,8 @@ TEST(TableHeapTest, TableHeapDeleteTest) {
   // 验证回滚后可以读取数据
   Row row4(row_ids[2]);
   ASSERT_TRUE(table_heap->GetTuple(&row4, nullptr));
+  ASSERT_EQ(CmpBool::kTrue, row4.GetField(0)->CompareEquals(Field(TypeId::kTypeInt, 2)));
+  ASSERT_EQ(CmpBool::kTrue, row4.GetField(1)->CompareEquals(Field(TypeId::kTypeChar, "abc", 4, true)));
 }
 
 TEST(TableHeapTest, TableHeapUpdateTest) {
@@ -191,30 +193,38 @@ TEST(TableHeapTest, TableIteratorTest) {
     Fields *fields = new Fields{Field(TypeId::kTypeInt, value)};
     Row row(*fields);
     ASSERT_TRUE(table_heap->InsertTuple(row, nullptr));
+    // LOG(INFO) << "insert rid: " << row.GetRowId().GetPageId() << " " << row.GetRowId().GetSlotNum() << std::endl;
     row_ids.push_back(row.GetRowId());
     delete fields;
   }
   
   // 测试迭代器遍历
   int expected_value = 1;
-  for (auto iter = table_heap->Begin(nullptr); iter != table_heap->End(); ++iter) {
+  printf("1\n");
+  auto iter = table_heap->Begin(nullptr);
+  ASSERT_NE(iter, table_heap->End());
+  for (iter = table_heap->Begin(nullptr); iter != table_heap->End(); ++iter) {
+    Row row = *iter;
+    // LOG(INFO) << "iter rid: " << row.GetRowId().GetPageId() << " " << row.GetRowId().GetSlotNum() << std::endl;
+    ASSERT_EQ(row.GetFields().size(), 1);
     Field expected_field(TypeId::kTypeInt, expected_value);
     ASSERT_EQ(CmpBool::kTrue, (*iter).GetField(0)->CompareEquals(expected_field));
     expected_value++;
   }
   
   // 测试迭代器拷贝构造和赋值
+  printf("2\n");
   auto iter1 = table_heap->Begin(nullptr);
   auto iter2(iter1);  // 拷贝构造
-//   ASSERT_EQ((*iter1).GetField(0)->GetInt(), (*iter2).GetField(0)->GetInt());
   ASSERT_EQ(CmpBool::kTrue, (*iter1).GetField(0)->CompareEquals(*(*iter2).GetField(0)));
   
+  printf("3\n");
   auto iter3 = table_heap->Begin(nullptr);
   iter3 = iter1;  // 赋值操作
-//   ASSERT_EQ((*iter1).GetField(0)->GetInt(), (*iter3).GetField(0)->GetInt());
   ASSERT_EQ(CmpBool::kTrue, (*iter1).GetField(0)->CompareEquals(*(*iter3).GetField(0)));
   
   // 测试迭代器比较操作
+  printf("4\n");
   auto begin = table_heap->Begin(nullptr);
   auto end = table_heap->End();
   ASSERT_NE(begin, end);

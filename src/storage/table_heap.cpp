@@ -4,8 +4,12 @@
  * TODO: Student Implement
  */
 bool TableHeap::InsertTuple(Row &row, Txn *txn) {
+    if (first_page_id_ == INVALID_PAGE_ID) {
+        LOG(ERROR) << "Failed to insert tuple: table is empty" << std::endl;
+    }
     // 获取第一个页面
     auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(first_page_id_));
+    // LOG(INFO) << "Insert: fetch first page: " << first_page_id_ << std::endl;
     if (page == nullptr) {
         LOG(ERROR) << "Failed to fetch page " << first_page_id_ << std::endl;
         return false;
@@ -177,6 +181,7 @@ void TableHeap::DeleteTable(page_id_t page_id) {
 TableIterator TableHeap::Begin(Txn *txn) {
     // 获取第一个页面
     auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(first_page_id_));
+    // LOG(INFO) << "In Begin: first_page_id_: " << first_page_id_ << std::endl;
     if (page == nullptr) {
         LOG(ERROR) << "Failed to fetch page when get Begin iterator(a): " << first_page_id_ << std::endl;
         return End();
@@ -187,10 +192,12 @@ TableIterator TableHeap::Begin(Txn *txn) {
     RowId rid;
     // 获取页面中第一个有效的元组
     if (page->GetFirstTupleRid(&rid)) {
+        // LOG(INFO) << "In Begin 0: rid: " << rid.GetPageId() << " " << rid.GetSlotNum() << std::endl;
         page->RUnlatch();
         buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
         return TableIterator(this, rid, txn);
     }
+    // LOG(INFO) << "In Begin 1: rid: " << rid.GetPageId() << " " << rid.GetSlotNum() << std::endl;
 
     // 如果当前页面没有有效元组，尝试在后续页面中查找
     while (page->GetNextPageId() != INVALID_PAGE_ID) {
@@ -204,6 +211,7 @@ TableIterator TableHeap::Begin(Txn *txn) {
         }
         page->RLatch();
         if (page->GetFirstTupleRid(&rid)) {
+            // LOG(INFO) << "In Begin 2: rid: " << rid.GetPageId() << " " << rid.GetSlotNum() << "pageid: " << next_page_id << std::endl;
             page->RUnlatch();
             buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
             return TableIterator(this, rid, txn);
@@ -213,7 +221,7 @@ TableIterator TableHeap::Begin(Txn *txn) {
     // 如果没有找到有效元组，返回End迭代器
     page->RUnlatch();
     buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
-    LOG(ERROR) << "Failed to find a valid tuple when get Begin iterator" << std::endl;
+    LOG(WARNING) << "Failed to find a valid tuple when get Begin iterator" << std::endl;
     return End();
 }
 
