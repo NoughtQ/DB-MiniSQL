@@ -69,12 +69,14 @@ TableIterator &TableIterator::operator++() {
                 if (page->GetFirstTupleRid(&next_rid)) {
                     rid_ = next_rid;
                     row_->SetRowId(rid_);
-                    break;
+                    row_->destroy();
+                    table_heap_->GetTuple(row_, txn_);
+                    table_heap_->buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+                    return *this;
                 }
             }
-            if (page->GetNextPageId() == INVALID_PAGE_ID) { // 找不到下一个元组，即 tabel_heap_->end()
-                rid_.Set(INVALID_PAGE_ID, 0);
-            }
+            // 找不到下一个元组，即 tabel_heap_->end()
+            rid_.Set(INVALID_PAGE_ID, 0);
         }
         if (rid_.GetPageId() != INVALID_PAGE_ID) { // 读取下一个元组
             row_->destroy();

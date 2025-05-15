@@ -45,11 +45,13 @@ bool TablePage::MarkDelete(const RowId &rid, Txn *txn, LockManager *lock_manager
   uint32_t slot_num = rid.GetSlotNum();
   // If the slot number is invalid, abort.
   if (slot_num >= GetTupleCount()) {
+    LOG(ERROR) << "Invalid slot number." << std::endl;
     return false;
   }
   uint32_t tuple_size = GetTupleSize(slot_num);
   // If the tuple is already deleted, abort.
   if (IsDeleted(tuple_size)) {
+    LOG(WARNING) << "Tuple already marked delete." << std::endl;
     return false;
   }
   // Mark the tuple as deleted.
@@ -68,11 +70,13 @@ bool TablePage::UpdateTuple(Row &new_row, Row *old_row, Schema *schema, bool &va
   // If the slot number is invalid, abort.
   valid = false;
   if (slot_num >= GetTupleCount()) {
+    LOG(ERROR) << "Invalid slot number." << std::endl;
     return false;
   }
   uint32_t tuple_size = GetTupleSize(slot_num);
   // If the tuple is deleted, abort.
   if (IsDeleted(tuple_size)) {
+    LOG(ERROR) << "Tuple already marked delete." << std::endl;
     return false;
   }
   // If there is not enough space to update, we need to update via delete followed by an insert (not enough space).
@@ -148,12 +152,14 @@ bool TablePage::GetTuple(Row *row, Schema *schema, Txn *txn, LockManager *lock_m
   uint32_t slot_num = row->GetRowId().GetSlotNum();
   // If somehow we have more slots than tuples, abort the recovery.
   if (slot_num >= GetTupleCount()) {
+    LOG(ERROR) << "We can't have more slots than tuples." << std::endl;
     return false;
   }
   // Otherwise get the current tuple size too.
   uint32_t tuple_size = GetTupleSize(slot_num);
   // If the tuple is deleted, abort the recovery.
   if (IsDeleted(tuple_size)) {
+    LOG(WARNING) << "Tuple already marked delete." << std::endl;
     return false;
   }
   // At this point, we have at least a shared lock on the RID. Copy the tuple data into our result.
@@ -176,7 +182,7 @@ bool TablePage::GetFirstTupleRid(RowId *first_rid) {
 }
 
 bool TablePage::GetNextTupleRid(const RowId &cur_rid, RowId *next_rid) {
-  ASSERT(cur_rid.GetPageId() == GetTablePageId(), "Wrong table!");
+  ASSERT(cur_rid.GetPageId() == GetTablePageId(), "Wrong page!");
   // Find and return the first valid tuple after our current slot number.
   for (auto i = cur_rid.GetSlotNum() + 1; i < GetTupleCount(); i++) {
     if (!IsDeleted(GetTupleSize(i))) {

@@ -52,6 +52,9 @@ bool TableHeap::InsertTuple(Row &row, Txn *txn) {
         new_page->WLatch();
         insert_success = new_page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
         new_page->WUnlatch();
+        if (!insert_success) {
+            LOG(ERROR) << "Unexpected error while insert" << std::endl;
+        }
 
         buffer_pool_manager_->UnpinPage(new_page_id, true);
     }
@@ -69,10 +72,13 @@ bool TableHeap::MarkDelete(const RowId &rid, Txn *txn) {
   }
   // Otherwise, mark the tuple as deleted.
   page->WLatch();
-  page->MarkDelete(rid, txn, lock_manager_, log_manager_);
+  bool success = page->MarkDelete(rid, txn, lock_manager_, log_manager_);
   page->WUnlatch();
   buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
-  return true;
+  if (!success) {
+    LOG(ERROR) << "Unexpected behavior of MarkDelete" << std::endl;
+  }
+  return success;
 }
 
 /**
@@ -87,6 +93,7 @@ bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) {
     }
 
     // 尝试在现有页面中更新
+    row.SetRowId(rid);
     Row old_row(rid);
     page->WLatch();
     bool valid = false;
@@ -99,9 +106,12 @@ bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) {
         if (MarkDelete(rid, txn)) {
             // 尝试插入新元组
             if (InsertTuple(row, txn)) {
+                ApplyDelete(rid, txn);
                 buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
                 return true;
             }
+            // 插入新元组失败，需要回滚删除操作
+            RollbackDelete(rid, txn);
             LOG(ERROR) << "Failed to insert new tuple" << std::endl;
         } else {
             LOG(ERROR) << "Failed to mark delete old tuple" << std::endl;
@@ -130,6 +140,7 @@ void TableHeap::ApplyDelete(const RowId &rid, Txn *txn) {
     page->ApplyDelete(rid, txn, log_manager_);
     page->WUnlatch();
     buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
+  // TODO: 当一个 table page 中所有元组都被删除了，需要删除这个 page。这里改了之后 iterator 里也要优化
 }
 
 void TableHeap::RollbackDelete(const RowId &rid, Txn *txn) {
