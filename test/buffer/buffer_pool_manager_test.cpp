@@ -100,7 +100,7 @@ void InitializeBufferPool(BufferPoolManager *bpm, std::vector<page_id_t> &page_i
 void TestFrequentAccess(BufferPoolManager *bpm, const std::vector<page_id_t> &page_ids, size_t buffer_pool_size) {
     // 应当很快，因为前半部分还没有被替换
     printf("Accessing the whole buffer pool...\n");
-    for (size_t i = buffer_pool_size / 2; i < buffer_pool_size; ++i) {
+    for (size_t i = 0; i < buffer_pool_size; ++i) {
         for (int j = 0; j < 5; ++j) {
             auto *page = bpm->FetchPage(page_ids[i]);
             EXPECT_NE(nullptr, page);

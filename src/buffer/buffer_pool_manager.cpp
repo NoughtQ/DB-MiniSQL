@@ -157,7 +157,7 @@ bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
     if(page->pin_count_ == 0) {
         replacer_->Unpin(frame_id);
     }
-    page->is_dirty_ = is_dirty;
+    page->is_dirty_ |= is_dirty;
     return true;
 }
 
