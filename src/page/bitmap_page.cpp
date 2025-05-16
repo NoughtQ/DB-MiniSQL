@@ -12,12 +12,17 @@ bool BitmapPage<PageSize>::AllocatePage(uint32_t &page_offset) {
   if (next_free_page_ == INVALID_PAGE) {
     return false;
   }
+  if (page_allocated_ == GetMaxSupportedSize()) {
+    LOG(ERROR) << "No more space in the bitmap page";
+    return false;
+  }
   page_offset = next_free_page_; // 分配下一个可用的页面
 
   /* 更新位图 */
   uint32_t byte_index = page_offset / 8;
   uint8_t bit_index = page_offset % 8;
   bytes[byte_index] |= (1 << bit_index);
+  page_allocated_++; // 增加已分配的页面数
 
   /* 更新下一个可用的页面 */
   uint32_t start = next_free_page_;
@@ -46,6 +51,7 @@ bool BitmapPage<PageSize>::DeAllocatePage(uint32_t page_offset) {
 
   /* 检查页面是否已经被释放 */
   if (IsPageFree(page_offset)) {
+    LOG(WARNING) << "Page is already free";
     return false;
   }
 
@@ -53,6 +59,7 @@ bool BitmapPage<PageSize>::DeAllocatePage(uint32_t page_offset) {
   uint32_t byte_index = page_offset / 8;
   uint8_t bit_index = page_offset % 8;
   bytes[byte_index] &= ~(1 << bit_index);
+  page_allocated_--; // 减少已分配的页面数
 
   /* 更新下一个可用的页面 */
   if(next_free_page_ == INVALID_PAGE){

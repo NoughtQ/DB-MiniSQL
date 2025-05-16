@@ -45,6 +45,10 @@ void LRUReplacer::Unpin(frame_id_t frame_id) {
     LOG(WARNING) << "frame_id already exists: " << frame_id << std::endl;
     return;
   }
+  if(lru_list_.size() >= max_size_) {
+    LOG(ERROR) << "LRUReplacer is full" << std::endl;
+    return;
+  }
   lru_list_.push_front(frame_id); // 插入链表头部
   lru_map_[frame_id] = lru_list_.begin(); // 插入哈希表
 }

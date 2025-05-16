@@ -115,7 +115,20 @@ class TableHeap {
         schema_(schema),
         log_manager_(log_manager),
         lock_manager_(lock_manager) {
-    ASSERT(false, "Not implemented yet.");
+    // 创建第一个表页面
+    page_id_t new_page_id;
+    auto first_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->NewPage(new_page_id));
+    if (first_page == nullptr) {
+      LOG(ERROR) << "Failed to create first page while creating table heap" << std::endl;
+      return;
+    }
+
+    // 初始化第一个表页面
+    first_page->Init(new_page_id, INVALID_PAGE_ID, log_manager_, txn);
+    first_page_id_ = new_page_id;
+
+    // 释放页面
+    buffer_pool_manager_->UnpinPage(new_page_id, true);
   };
 
   explicit TableHeap(BufferPoolManager *buffer_pool_manager, page_id_t first_page_id, Schema *schema,
