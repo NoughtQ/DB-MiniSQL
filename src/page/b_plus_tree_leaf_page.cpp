@@ -123,7 +123,7 @@ std::pair<GenericKey *, RowId> LeafPage::GetItem(int index) { return {KeyAt(inde
 int LeafPage::Insert(GenericKey *key, const RowId &value, const KeyManager &KM) {
   int current_size = GetSize();
   int index = KeyIndex(key, KM);
-  if (KM.CompareKeys(KeyAt(index), key) == 0) return -1;
+  if (index != -1 && KM.CompareKeys(KeyAt(index), key) == 0) return -1;
 
   // insert to the tail has no need to memmove
   if (index < 0) {

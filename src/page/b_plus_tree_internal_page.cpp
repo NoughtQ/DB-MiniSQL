@@ -232,7 +232,7 @@ page_id_t InternalPage::RemoveAndReturnOnlyChild() {
 /*****************************************************************************
  * MERGE
  *****************************************************************************/
-// auua: 和叶子节点不同，内部节点合并是右边的并到左边的尾部
+// auua: 内部节点合并也是右边的并到左边的尾部
  /*
  * Remove all of key & value pairs from this page to "recipient" page.
  * The middle_key is the separation key you should get from the parent. You need
