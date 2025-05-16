@@ -7,6 +7,10 @@ bool TableHeap::InsertTuple(Row &row, Txn *txn) {
     if (first_page_id_ == INVALID_PAGE_ID) {
         LOG(ERROR) << "Failed to insert tuple: table is empty" << std::endl;
     }
+    if (row.GetSerializedSize(schema_) > TablePage::SIZE_MAX_ROW) {
+        LOG(ERROR) << "Failed to insert tuple: tuple is too large" << std::endl;
+        return false;
+    }
     // 获取第一个页面
     auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(first_page_id_));
     // LOG(INFO) << "Insert: fetch first page: " << first_page_id_ << std::endl;
