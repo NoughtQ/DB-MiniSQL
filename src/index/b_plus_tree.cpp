@@ -452,7 +452,7 @@ bool BPlusTree::Coalesce(LeafPage *&neighbor_node, LeafPage *&node, InternalPage
 
   // Remove the right node from parent and delete it
   page_id_t old_page_id = deleted_node->GetPageId();
-  parent->Remove(node_need_deleted ? index - 1 : index);
+  parent->Remove(node_need_deleted ? index : index+1);
   buffer_pool_manager_->UnpinPage(old_page_id, false);
   buffer_pool_manager_->DeletePage(old_page_id);
 
@@ -591,12 +591,12 @@ IndexIterator BPlusTree::Begin(const GenericKey *key) {
  */
 IndexIterator BPlusTree::End() { 
   if (IsEmpty()) return IndexIterator();
-  Page *leaf_page = FindLeafPage(nullptr, root_page_id_, false, true);
+  /* Page *leaf_page = FindLeafPage(nullptr, root_page_id_, false, true);
   LeafPage *leaf_node = reinterpret_cast<LeafPage*>(leaf_page->GetData());
   page_id_t t_page_id = leaf_node->GetPageId();
   int index = leaf_node->GetSize()-1;
-  buffer_pool_manager_->UnpinPage(t_page_id, true);
-  return IndexIterator(t_page_id, buffer_pool_manager_, index); 
+  buffer_pool_manager_->UnpinPage(t_page_id, true); */
+  return IndexIterator(INVALID_PAGE_ID, buffer_pool_manager_, 0); 
 }
 
 /*****************************************************************************
