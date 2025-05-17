@@ -401,6 +401,7 @@ bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
   if (node->GetSize() + sibling->GetSize() <= node->GetMaxSize()) {
     // Coalesce the nodes
     bool parent_deleted = Coalesce(sibling, node, parent, node_index, transaction);
+    finish_delete_node = (node_index != 0);
 
     // Handle parent page if it wasn't deleted
     if (!parent_deleted) {
@@ -411,11 +412,12 @@ bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
       parent_needs_Unpin = true;
     }
 
-    // Mark node for deletion if it's the right sibling (index != 0)
-    finish_delete_node = (node_index != 0);
+    // node被删，那么sibling就没被删，需要释放
+    if (finish_delete_node) buffer_pool_manager_->UnpinPage(sibling_id, true);
   } else {
     // Redistribute entries between nodes
     Redistribute(sibling, node, node_index, parent);
+    buffer_pool_manager_->UnpinPage(sibling_id, true);
     parent_needs_Unpin = true;
   }
 
@@ -423,8 +425,6 @@ bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
   if (parent_needs_Unpin) {
     buffer_pool_manager_->UnpinPage(parent_id, true);
   }
-  // node被删，那么sibling就没被删，需要释放
-  if (finish_delete_node) buffer_pool_manager_->UnpinPage(sibling_id, true);
 
   return finish_delete_node;
 }
@@ -443,20 +443,22 @@ bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
  */
 bool BPlusTree::Coalesce(LeafPage *&neighbor_node, LeafPage *&node, InternalPage *&parent, int index,
                          Txn *transaction) {
-  bool node_need_deleted = (index != 0);
-  LeafPage *live_node = node_need_deleted ? neighbor_node : node;
-  LeafPage *deleted_node = node_need_deleted ? node : neighbor_node;
+  // Determine which node to keep (left node) and which to delete (right node)
+  LeafPage *keep_node = (index != 0) ? neighbor_node : node;
+  LeafPage *delete_node = (index != 0) ? node : neighbor_node;
 
-  // Move all entries from right node to left node
-  deleted_node->MoveAllTo(live_node);
+  // Move all entries from the node to be deleted to the kept node
+  delete_node->MoveAllTo(keep_node);
 
-  // Remove the right node from parent and delete it
-  page_id_t old_page_id = deleted_node->GetPageId();
-  parent->Remove(node_need_deleted ? index : index+1);
-  buffer_pool_manager_->UnpinPage(old_page_id, false);
-  buffer_pool_manager_->DeletePage(old_page_id);
+  // Remove the deleted node from parent and clean up
+  page_id_t delete_page_id = delete_node->GetPageId();
+  parent->Remove((index != 0) ? index : index + 1);
 
-  // Check if parent needs further adjustment
+  // Clean up the deleted page
+  buffer_pool_manager_->UnpinPage(delete_page_id, false);
+  buffer_pool_manager_->DeletePage(delete_page_id);
+
+  // Check if parent needs adjustment due to the removal
   return CoalesceOrRedistribute(parent, transaction);
 }
 

@@ -8,3 +8,4 @@ cmake-build-debug/
 cmake-build-release/
 .trae/
 .DS_Store
+.gdb_history
