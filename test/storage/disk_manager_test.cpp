@@ -34,7 +34,7 @@ TEST(DiskManagerTest, BitMapPageTest) {
   ASSERT_FALSE(bitmap->AllocatePage(ofs));
 }
 
-TEST(DiskManagerTest, DISABLED_FreePageAllocationTest) {
+TEST(DiskManagerTest, FreePageAllocationTest) {
   std::string db_name = "disk_test.db";
   remove(db_name.c_str());
   DiskManager *disk_mgr = new DiskManager(db_name);

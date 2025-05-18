@@ -67,11 +67,10 @@ TEST(BufferPoolManagerTest, BinaryDataTest) {
   EXPECT_EQ(true, bpm->UnpinPage(0, true));
 
   // Shutdown the disk manager and remove the temporary file we created.
-  disk_manager->Close();
-  remove(db_name.c_str());
-
   delete bpm;
+  disk_manager->Close();
   delete disk_manager;
+  remove(db_name.c_str());
 }
 
 // 初始化缓冲池并填充数据
@@ -219,8 +218,8 @@ TEST(BufferPoolManagerTest, LRUPerformanceTest) {
     VerifyBufferPoolState(bpm, page_ids, buffer_pool_size);
 
     // 清理
-    disk_manager->Close();
-    remove(db_name.c_str());
     delete bpm;
+    disk_manager->Close();
     delete disk_manager;
+    remove(db_name.c_str());
 }

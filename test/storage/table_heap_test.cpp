@@ -391,8 +391,8 @@ TEST(TableHeapTest, TableHeapMassiveTest) {
         delete kv.second;
     }
     delete table_heap;
-    delete disk_mgr;
     delete bpm;
+    delete disk_mgr;
 }
 
 TEST(TableHeapTest, TableIteratorTest) {

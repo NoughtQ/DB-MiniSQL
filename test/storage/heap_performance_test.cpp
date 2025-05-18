@@ -135,6 +135,6 @@ TEST(TableHeapTest, HeapPerformanceTest) {
         delete kv.second;
     }
     delete table_heap;
-    delete disk_mgr;
     delete bpm;
+    delete disk_mgr;
 }
