@@ -327,6 +327,9 @@ void InternalPage::MoveLastToFrontOf(InternalPage *recipient, GenericKey *middle
   if(GetSize()<=0) return;
 
   recipient->CopyFirstFrom(middle_key, ValueAt(GetSize()-1), buffer_pool_manager);
+  
+  // auua：上层调用时认为整个键值对都传过去了...导致了bug...
+  recipient->SetKeyAt(0,KeyAt(GetSize()-1));
 
   IncreaseSize(-1);
 }

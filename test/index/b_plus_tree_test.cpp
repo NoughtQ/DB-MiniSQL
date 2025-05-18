@@ -12,21 +12,27 @@ TEST(BPlusTreeTests, SampleTest) {
   // Init engine
   DBStorageEngine engine(db_name);
   std::vector<Column *> columns = {
-      new Column("int", TypeId::kTypeInt, 0, false, false),
+      new Column("int1", TypeId::kTypeInt, 0, false, false),
+      new Column("int2", TypeId::kTypeInt, 1, false, false),
+      new Column("name", TypeId::kTypeChar, 64, 2, true, false)
   };
   Schema *table_schema = new Schema(columns);
-  KeyManager KP(table_schema, 17);
+  KeyManager KP(table_schema, 128);
   BPlusTree tree(0, engine.bpm_, KP);
   TreeFileManagers mgr("tree_");
   // Prepare data
-  const int n = 2000;
+  const int n = 8000;
   vector<GenericKey *> keys;
   vector<RowId> values;
   vector<GenericKey *> delete_seq;
   map<GenericKey *, RowId> kv_map;
   for (int i = 0; i < n; i++) {
     GenericKey *key = KP.InitKey();
-    std::vector<Field> fields{Field(TypeId::kTypeInt, i)};
+    std::vector<Field> fields{
+      Field(TypeId::kTypeInt, i),
+      Field(TypeId::kTypeInt, i+n),
+      Field(TypeId::kTypeChar, const_cast<char *>("minisql"), 7, true)
+    };
     KP.SerializeFromKey(key, Row(fields), table_schema);
     keys.push_back(key);
     values.push_back(RowId(i));
