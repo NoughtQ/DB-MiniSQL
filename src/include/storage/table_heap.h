@@ -8,6 +8,8 @@
 #include "recovery/log_manager.h"
 #include "storage/table_iterator.h"
 
+#include "glog/logging.h"
+
 class TableHeap {
   friend class TableIterator;
 
@@ -27,7 +29,7 @@ class TableHeap {
   /**
    * Insert a tuple into the table. If the tuple is too large (>= page_size), return false.
    * @param[in/out] row Tuple Row to insert, the rid of the inserted tuple is wrapped in object row
-   * @param[in] txn The recovery performing the insert
+   * @param[in] txn The transaction performing the insert
    * @return true iff the insert is successful
    */
   bool InsertTuple(Row &row, Txn *txn);
@@ -41,7 +43,7 @@ class TableHeap {
   bool MarkDelete(const RowId &rid, Txn *txn);
 
   /**
-   * if the new tuple is too large to fit in the old page, return false (will delete and insert)
+   * if the new tuple is too large to fit in the old page, will delete and insert
    * @param[in] row Tuple of new row
    * @param[in] rid Rid of the old tuple
    * @param[in] txn Txn performing the update
@@ -66,7 +68,7 @@ class TableHeap {
   /**
    * Read a tuple from the table.
    * @param[in/out] row Output variable for the tuple, row id of the tuple is wrapped in row
-   * @param[in] txn recovery performing the read
+   * @param[in] txn Txn performing the read
    * @return true if the read was successful (i.e. the tuple exists)
    */
   bool GetTuple(Row *row, Txn *txn);
@@ -113,7 +115,20 @@ class TableHeap {
         schema_(schema),
         log_manager_(log_manager),
         lock_manager_(lock_manager) {
-    ASSERT(false, "Not implemented yet.");
+    // 创建第一个表页面
+    page_id_t new_page_id;
+    auto first_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->NewPage(new_page_id));
+    if (first_page == nullptr) {
+      LOG(ERROR) << "Failed to create first page while creating table heap" << std::endl;
+      return;
+    }
+
+    // 初始化第一个表页面
+    first_page->Init(new_page_id, INVALID_PAGE_ID, log_manager_, txn);
+    first_page_id_ = new_page_id;
+
+    // 释放页面
+    buffer_pool_manager_->UnpinPage(new_page_id, true);
   };
 
   explicit TableHeap(BufferPoolManager *buffer_pool_manager, page_id_t first_page_id, Schema *schema,

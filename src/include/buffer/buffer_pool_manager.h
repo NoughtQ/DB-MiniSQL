@@ -43,7 +43,7 @@ class BufferPoolManager {
    */
   void DeallocatePage(page_id_t page_id);
 
-  frame_id_t TryToFindFreePage();
+  // frame_id_t TryToFindFreePage();
 
  private:
   size_t pool_size_;                                 // number of pages in buffer pool
