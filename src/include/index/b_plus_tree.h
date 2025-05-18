@@ -40,7 +40,7 @@ class BPlusTree {
 
   // return the value associated with a given key
   bool GetValue(const GenericKey *key, std::vector<RowId> &result, Txn *transaction = nullptr);
-
+  
   IndexIterator Begin();
 
   IndexIterator Begin(const GenericKey *key);
@@ -48,7 +48,7 @@ class BPlusTree {
   IndexIterator End();
 
   // expose for test purpose
-  Page *FindLeafPage(const GenericKey *key, page_id_t page_id = INVALID_PAGE_ID, bool leftMost = false);
+  Page *FindLeafPage(const GenericKey *key, page_id_t page_id = INVALID_PAGE_ID, bool leftMost = false, bool rightMost = false);
 
   // used to check whether all pages are unpinned
   bool Check();
@@ -87,11 +87,13 @@ class BPlusTree {
   bool Coalesce(LeafPage *&neighbor_node, LeafPage *&node, InternalPage *&parent, int index,
                 Txn *transaction = nullptr);
 
-  void Redistribute(LeafPage *neighbor_node, LeafPage *node, int index);
+  void Redistribute(LeafPage *neighbor_node, LeafPage *node, int index, InternalPage* parent);
 
-  void Redistribute(InternalPage *neighbor_node, InternalPage *node, int index);
+  void Redistribute(InternalPage *neighbor_node, InternalPage *node, int index, InternalPage* parent);
 
   bool AdjustRoot(BPlusTreePage *node);
+
+  void AdjustInternalRoot(InternalPage *root, BPlusTreePage *node);
 
   void UpdateRootPageId(int insert_record = 0);
 
