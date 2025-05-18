@@ -39,11 +39,17 @@ void DiskManager::Close() {
 
 void DiskManager::ReadPage(page_id_t logical_page_id, char *page_data) {
   ASSERT(logical_page_id >= 0, "Invalid page id.");
+  if (IsPageFree(logical_page_id)) {
+    LOG(WARNING) << "Attempting to read free page.";
+  }
   ReadPhysicalPage(MapPageId(logical_page_id), page_data);
 }
 
 void DiskManager::WritePage(page_id_t logical_page_id, const char *page_data) {
   ASSERT(logical_page_id >= 0, "Invalid page id.");
+  if (IsPageFree(logical_page_id)) {
+    LOG(WARNING) << "Attempting to write free page.";
+  }
   WritePhysicalPage(MapPageId(logical_page_id), page_data);
 }
 

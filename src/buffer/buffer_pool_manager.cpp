@@ -94,7 +94,6 @@ Page *BufferPoolManager::NewPage(page_id_t &page_id) {
       FlushPage(page->page_id_);
     }
     page_table_.erase(page->page_id_); // 善后
-    page->ResetMemory();
   } else {  // 内存还空着
     frame_id = free_list_.front();
     free_list_.pop_front();
@@ -102,6 +101,7 @@ Page *BufferPoolManager::NewPage(page_id_t &page_id) {
   }
   page_id = AllocatePage(); // 分配新的 page_id
   page_table_.insert({page_id, frame_id});
+  page->ResetMemory();
   page->page_id_ = page_id;
   page->is_dirty_ = false;
   page->pin_count_ = 1;
@@ -144,6 +144,7 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) {
 bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
     auto it = page_table_.find(page_id);
     if(it == page_table_.end()) {
+        LOG(ERROR) << "Page not in buffer pool: " << page_id << endl;
         return false;
     }
     frame_id_t frame_id = it->second;
