@@ -7,6 +7,7 @@
 #include <chrono>
 
 #include "common/result_writer.h"
+
 #include "executor/executors/delete_executor.h"
 #include "executor/executors/index_scan_executor.h"
 #include "executor/executors/insert_executor.h"
@@ -15,7 +16,18 @@
 #include "executor/executors/values_executor.h"
 #include "glog/logging.h"
 #include "planner/planner.h"
+#include "parser/minisql_yacc.h"
+#include "parser/syntax_tree_printer.h"
 #include "utils/utils.h"
+#include "utils/tree_file_mgr.h"
+
+extern "C" {
+  int yyparse(void);
+  FILE *yyin;
+  #include "parser/minisql_lex.h"
+  #include "parser/parser.h"
+  }
+
 
 ExecuteEngine::ExecuteEngine() {
   char path[] = "./databases";
@@ -344,7 +356,50 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteCreateTable" << std::endl;
 #endif
-  return DB_FAILED;
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
+  auto catelog = context->GetCatalog();
+  string table_name = ast->child_->val_;
+  vector<Column *> columns;
+  auto node = ast->child_->next_->child_;
+  auto table_idx = 0;
+
+  while (node) {
+    string column_name = node->child_->val_;
+    string column_type = node->child_->next_->val_;
+    bool is_unique = false;
+    bool is_null = false;
+    if (node->val_ != NULL) {
+      if (string(node->val_) == "unique")
+        is_unique = true;
+      if (string(node->val_) == "is null")
+        is_null = true;
+    }
+
+    auto type = kTypeInvalid;  
+    if (column_type == "int")
+      type = kTypeInt;
+    else if (column_type == "char")
+      type = kTypeChar;
+    else if (column_type == "float")
+      type = kTypeFloat;
+    
+    auto column = new Column(column_name, type, table_idx, is_null, is_unique);
+    columns.push_back(column);
+    ++table_idx;
+    node = node->next_;
+  }
+
+  auto schema = new Schema(columns);
+  TableInfo *table_info;
+  if (catelog->CreateTable(table_name, schema, nullptr, table_info)  != DB_SUCCESS) {
+    return DB_FAILED;
+  }
+  
+  return DB_SUCCESS;
 }
 
 /**
@@ -354,7 +409,18 @@ dberr_t ExecuteEngine::ExecuteDropTable(pSyntaxNode ast, ExecuteContext *context
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteDropTable" << std::endl;
 #endif
- return DB_FAILED;
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
+  auto catelog = context->GetCatalog();
+  string table_name = ast->child_->val_;
+  if (catelog->DropTable(table_name)  != DB_SUCCESS) {
+    return DB_FAILED;
+  }
+
+  return DB_SUCCESS;
 }
 
 /**
@@ -364,7 +430,58 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteShowIndexes" << std::endl;
 #endif
-  return DB_FAILED;
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
+  vector<string> table_names;  
+  vector<TableInfo *> tables;
+  vector<IndexInfo *> indexes;
+  map<string, vector<IndexInfo *>> table_name2indexes;
+  string index_in_db("All Indexes");
+  uint max_width = index_in_db.length();
+
+  if (dbs_[current_db_]->catalog_mgr_->GetTables(tables) == DB_FAILED) {
+    cout << "Empty set (0.00 sec)" << endl;
+    return DB_FAILED;
+  }
+
+  for (const auto &table : tables)
+    table_names.push_back(table->GetTableName());
+  bool has_index = false;
+  for (const auto &table_name : table_names) {
+    if (dbs_[current_db_]->catalog_mgr_->GetTableIndexes(table_name, indexes) == DB_SUCCESS) {
+      has_index = true;
+      table_name2indexes[table_name] = indexes;
+    }
+    for (const auto &index : indexes) {
+      if (index->GetIndexName().length() > max_width) 
+        max_width = index->GetIndexName().length();
+    }
+  }
+  if (!has_index) {
+    cout << "Empty set (0.00 sec)" << endl;
+    return DB_FAILED;
+  }
+
+  cout << "+" << setfill('-') << setw(max_width + 2) << ""
+       << "+" << endl;
+  cout << "| " << std::left << setfill(' ') << setw(max_width) << index_in_db << " |" << endl;
+  cout << "+" << setfill('-') << setw(max_width + 2) << ""
+       << "+" << endl;
+  for (const auto &t2i : table_name2indexes) {
+    cout << "| " << std::left << setfill(' ') << setw(max_width) << "Index in " << t2i.first << " |" << endl;
+    cout << "+" << setfill('-') << setw(max_width + 2) << ""
+    << "+" << endl;
+    for (const auto &index : t2i.second) {
+      cout << "| " << std::left << setfill(' ') << setw(max_width) << index->GetIndexName() << " |" << endl;
+    }
+    cout << "+" << setfill('-') << setw(max_width + 2) << ""
+    << "+" << endl;
+  }
+
+  return DB_SUCCESS;
 }
 
 /**
@@ -374,7 +491,33 @@ dberr_t ExecuteEngine::ExecuteCreateIndex(pSyntaxNode ast, ExecuteContext *conte
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteCreateIndex" << std::endl;
 #endif
-  return DB_FAILED;
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
+  auto catelog = context->GetCatalog();
+  string index_name = ast->child_->val_;
+  string table_name = ast->child_->next_->val_;
+  vector<string> index_keys;
+  auto index_key_node = ast->child_->next_->next_->child_;
+
+  while (index_key_node) {
+    string column_name = index_key_node->val_;
+    index_keys.push_back(column_name);
+    index_key_node = index_key_node->next_;
+  }
+
+  string index_type = "";
+  if (ast->child_->next_->next_->next_)
+    index_type = ast->child_->next_->next_->next_->val_;
+
+  IndexInfo *index_info;
+  if (catelog->CreateIndex(table_name, index_name, index_keys, nullptr, index_info, index_type)  != DB_SUCCESS) {
+    return DB_FAILED;
+  }  
+
+  return DB_SUCCESS;
 }
 
 /**
@@ -384,13 +527,48 @@ dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteDropIndex" << std::endl;
 #endif
-  return DB_FAILED;
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+  auto catelog = context->GetCatalog();
+  string index_name = ast->child_->next_->val_;
+  string table_name = "";
+  vector<TableInfo *> tables;
+  vector<IndexInfo *> indexes;
+  vector<string> table_names;
+
+  if (dbs_[current_db_]->catalog_mgr_->GetTables(tables) == DB_FAILED)
+    return DB_FAILED;
+  for (const auto &table : tables)
+    table_names.push_back(table->GetTableName());
+
+  for (const auto &tn : table_names) {
+    if (dbs_[current_db_]->catalog_mgr_->GetTableIndexes(table_name, indexes) == DB_SUCCESS) {
+      for (const auto &index : indexes) {
+        if (index->GetIndexName() == index_name) {
+          table_name = tn;
+          break;
+        }
+      }
+    }
+  }
+
+  if (catelog->DropIndex(table_name, index_name)  != DB_SUCCESS) {
+    return DB_FAILED;
+  }
+  return DB_SUCCESS;
 }
 
 dberr_t ExecuteEngine::ExecuteTrxBegin(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteTrxBegin" << std::endl;
 #endif
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
   return DB_FAILED;
 }
 
@@ -398,6 +576,11 @@ dberr_t ExecuteEngine::ExecuteTrxCommit(pSyntaxNode ast, ExecuteContext *context
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteTrxCommit" << std::endl;
 #endif
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
   return DB_FAILED;
 }
 
@@ -405,6 +588,11 @@ dberr_t ExecuteEngine::ExecuteTrxRollback(pSyntaxNode ast, ExecuteContext *conte
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteTrxRollback" << std::endl;
 #endif
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
   return DB_FAILED;
 }
 
@@ -415,7 +603,69 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteExecfile" << std::endl;
 #endif
-  return DB_FAILED;
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
+  string file_name = ast->child_->val_;
+  fstream file;
+  file.open(file_name);
+  if (!file.is_open()) {
+    cout << "File not found" << endl;
+    return DB_FAILED;
+  }
+  
+  const int buf_size = 1024;
+  char buf[buf_size];
+  string sql;
+  // executor engine
+  ExecuteEngine engine;
+  // for print syntax tree
+  TreeFileManagers syntax_tree_file_mgr("syntax_tree_");
+  uint32_t syntax_tree_id = 0;
+
+  while (getline(file, sql)) {
+    // create buffer for sql input
+    YY_BUFFER_STATE bp = yy_scan_string(sql.c_str());
+    if (bp == nullptr) {
+      LOG(ERROR) << "Failed to create yy buffer state." << std::endl;
+      exit(1);
+    }
+    yy_switch_to_buffer(bp);
+
+    // init parser module
+    MinisqlParserInit();
+
+    // parse
+    yyparse();
+
+    // parse result handle
+    if (MinisqlParserGetError()) {
+      // error
+      printf("%s\n", MinisqlParserGetErrorMessage());
+    } else {
+      // Comment them out if you don't need to debug the syntax tree
+      printf("[INFO] Sql syntax parse ok!\n");
+      SyntaxTreePrinter printer(MinisqlGetParserRootNode());
+      printer.PrintTree(syntax_tree_file_mgr[syntax_tree_id++]);
+    }
+
+    auto result = engine.Execute(MinisqlGetParserRootNode());
+
+    // clean memory after parse
+    MinisqlParserFinish();
+    yy_delete_buffer(bp);
+    yylex_destroy();
+
+    // quit condition
+    engine.ExecuteInformation(result);
+    if (result == DB_QUIT) {
+      break;
+    }
+  }
+
+  return DB_SUCCESS;
 }
 
 /**
@@ -425,5 +675,11 @@ dberr_t ExecuteEngine::ExecuteQuit(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteQuit" << std::endl;
 #endif
- return DB_FAILED;
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
+  current_db_.clear();
+  return DB_SUCCESS;
 }
