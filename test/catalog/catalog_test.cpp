@@ -91,12 +91,14 @@ TEST(CatalogTest, CatalogIndexTest) {
   ASSERT_EQ(DB_COLUMN_NAME_NOT_EXIST, r2);
   auto r3 = catalog_01->CreateIndex("table-1", "index-1", index_keys, &txn, index_info, "bptree");
   ASSERT_EQ(DB_SUCCESS, r3);
+  cout << "r3" << endl;
   for (int i = 0; i < 10; i++) {
     std::vector<Field> fields{Field(TypeId::kTypeInt, i),
                               Field(TypeId::kTypeChar, const_cast<char *>("minisql"), 7, true)};
     Row row(fields);
     RowId rid(1000, i);
     ASSERT_EQ(DB_SUCCESS, index_info->GetIndex()->InsertEntry(row, rid, nullptr));
+    cout << i << endl;
   }
   // Scan Key
   std::vector<RowId> ret;

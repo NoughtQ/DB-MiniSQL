@@ -23,7 +23,7 @@
 
 extern "C" {
   int yyparse(void);
-  FILE *yyin;
+  extern FILE *yyin;
   #include "parser/minisql_lex.h"
   #include "parser/parser.h"
   }

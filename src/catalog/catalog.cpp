@@ -79,6 +79,11 @@ CatalogManager::CatalogManager(BufferPoolManager *buffer_pool_manager, LockManag
   tables_.clear();
   index_names_.clear();
   indexes_.clear();
+  // cout << "tabless:";
+  // for (auto iter : tables_)
+  //   cout << iter.first << " ";
+  // cout << endl;
+
   Page* page = buffer_pool_manager->FetchPage(CATALOG_META_PAGE_ID);
   char* buf = page->GetData();
 
@@ -86,11 +91,15 @@ CatalogManager::CatalogManager(BufferPoolManager *buffer_pool_manager, LockManag
     catalog_meta_ = CatalogMeta::NewInstance();
     catalog_meta_->SerializeTo(buf);
   } else {
+    // cout << "bb: " << buf << endl;
     catalog_meta_ = catalog_meta_->DeserializeFrom(buf);
-    for (const auto& table_meta_page: catalog_meta_->table_meta_pages_)
+    for (const auto& table_meta_page: catalog_meta_->table_meta_pages_) {
+      // cout << table_meta_page.first << " " << table_meta_page.second << endl;
       LoadTable(table_meta_page.first, table_meta_page.second);
-    for (const auto& index_meta_page: catalog_meta_->index_meta_pages_)
+    }
+    for (const auto& index_meta_page: catalog_meta_->index_meta_pages_) {
       LoadIndex(index_meta_page.first, index_meta_page.second);
+    }
   }
 
   buffer_pool_manager->UnpinPage(CATALOG_META_PAGE_ID, true);
@@ -116,19 +125,24 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
       return DB_TABLE_ALREADY_EXIST;
 
     table_id_t table_id = catalog_meta_->GetNextTableId();
-    TableMetadata *table_meta;
-    TableHeap *table_heap;
-    TableSchema *table_schema = table_schema->DeepCopySchema(schema);
+    TableMetadata *table_meta = nullptr;
+    TableHeap *table_heap = nullptr;
+    TableSchema *table_schema = nullptr;
     page_id_t table_page_id = 0, page_id = 0;
-    Page *table_page, *page1, *page2;
+    Page *table_page = nullptr, *page1 = nullptr, *page2 = nullptr;
     char *buf;
 
     table_page = buffer_pool_manager_->NewPage(table_page_id);
+    // cout << "table_page_id: " << table_page_id << endl;
     page1 = buffer_pool_manager_->NewPage(page_id);
+    // cout << "page_id: " << page_id << endl;
+    table_schema = table_schema->DeepCopySchema(schema);
+  
     
     // Initialize table info
     table_meta = table_meta->Create(table_id, table_name, table_page_id, table_schema);
     table_meta->SerializeTo(page1->GetData());
+    buffer_pool_manager_->UnpinPage(page_id, true); // Unpin metadata page and mark as dirty
     table_heap = table_heap->Create(buffer_pool_manager_, table_schema, txn, log_manager_, lock_manager_);
     table_info = table_info->Create();
     table_info->Init(table_meta, table_heap);
@@ -139,6 +153,7 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
 
     // Initialize catalog metadata
     catalog_meta_->table_meta_pages_[table_id] = page_id;
+    // cout << "page_id: " << page_id << ", table_id: " << table_id << endl;
     page2 = buffer_pool_manager_->FetchPage(CATALOG_META_PAGE_ID);
     buf = page2->GetData();
     catalog_meta_->SerializeTo(buf);
@@ -154,6 +169,10 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
  * TODO: Student Implement
  */
 dberr_t CatalogManager::GetTable(const string &table_name, TableInfo *&table_info) {
+  // for (const auto& table_name_ : table_names_)
+  //   cout << table_name_.first << " ";
+  // cout << endl;
+
   if (table_names_.count(table_name) == 0)
     return DB_TABLE_NOT_EXIST;
   
@@ -192,21 +211,19 @@ dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string 
       auto index_list = index_names_[table_name];
       if (index_list.count(index_name) == 1) 
         return DB_INDEX_ALREADY_EXIST;
-    } else {
-      return DB_FAILED;
     }
 
     table_id_t table_id = table_names_[table_name];
     TableInfo *table_info = tables_[table_id];
-    TableMetadata *table_meta ;
-    TableHeap *table_heap;
+    TableMetadata *table_meta = nullptr;
+    TableHeap *table_heap = nullptr;
     TableSchema *table_schema = table_info->GetSchema();
 
     std::unordered_map<std::string, index_id_t> index_name_to_index;
     std::vector<uint32_t> key_map;
     index_id_t index_id = catalog_meta_->GetNextIndexId();
-    IndexMetadata *index_meta;
-    IndexSchema *key_schema;
+    IndexMetadata *index_meta = nullptr;
+    IndexSchema *key_schema = nullptr;
 
     page_id_t index_page_id = 0, table_page_id = 0, page_id = 0;
     Page *index_page, *page1, *page2;
@@ -245,7 +262,6 @@ dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string 
   } catch (exception e) {
     return DB_FAILED;
   }  
-  return DB_FAILED;
 }
 
 /**
@@ -353,19 +369,24 @@ dberr_t CatalogManager::FlushCatalogMetaPage() const {
  */
 dberr_t CatalogManager::LoadTable(const table_id_t table_id, const page_id_t page_id) {
   try {
-    if (tables_.count(table_id) == 0)
-      return DB_TABLE_NOT_EXIST;
+    // cout << "tables:" << endl;
+    // for (auto iter : tables_)
+    //   cout << iter.first << " ";
+    if (tables_.count(table_id) != 0)
+      return DB_TABLE_ALREADY_EXIST;
 
-    TableMetadata *table_meta;
-    TableInfo *table_info;
-    TableHeap *table_heap;
-    TableSchema *table_schema;
+    TableMetadata *table_meta = nullptr;
+    TableInfo *table_info = nullptr;
+    TableHeap *table_heap = nullptr;
+    TableSchema *table_schema = nullptr;
     page_id_t table_page_id;
     Page *page;
     char *buf;
 
     page = buffer_pool_manager_->FetchPage(page_id);
     buf = page->GetData();
+    // cout << "page_id: " << page_id << endl;
+    // cout << "buf: " << buf << endl;
     
     // Obtain table metadata
     table_meta->DeserializeFrom(buf, table_meta);
@@ -375,13 +396,14 @@ dberr_t CatalogManager::LoadTable(const table_id_t table_id, const page_id_t pag
     table_heap = table_heap->Create(buffer_pool_manager_, page_id, table_schema, log_manager_, lock_manager_);
     table_info = table_info->Create();
     table_info->Init(table_meta, table_heap);
-
+    // cout << "table_name: " << table_meta->GetTableName() << endl;
+    
     // Update catalog manager
     std::string table_name = table_meta->GetTableName();
     table_names_[table_name] = table_id;
     tables_[table_id] = table_info;
 
-    buffer_pool_manager_->UnpinPage(page_id, false);
+    // buffer_pool_manager_->UnpinPage(page_id, false);
 
     return DB_SUCCESS;
   } catch (exception e) {
