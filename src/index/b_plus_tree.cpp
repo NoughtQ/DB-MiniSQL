@@ -17,6 +17,7 @@ BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager
       processor_(KM),
       leaf_max_size_(leaf_max_size),
       internal_max_size_(internal_max_size) {
+  UpdateRootPageId(true);
   int key_size = KM.GetKeySize();
   if (leaf_max_size == UNDEFINED_SIZE) {
     int pair_size = key_size + sizeof(RowId);
@@ -162,7 +163,7 @@ void BPlusTree::StartNewTree(GenericKey *key, const RowId &value) {
   // Unpin the page after modifications
   new_root_node->SetNextPageId(INVALID_PAGE_ID);
   buffer_pool_manager_->UnpinPage(root_page_id_, true);
-  UpdateRootPageId(true);
+  UpdateRootPageId(false);
 }
 
 // auua: 这里说实话违背了资源谁申请，谁释放的原则...因为findleafpage这么要求，那就只能这样了...
@@ -291,7 +292,7 @@ void BPlusTree::InsertIntoParent(BPlusTreePage *old_node, GenericKey *key, BPlus
 
     // Update root in buffer pool and header
     buffer_pool_manager_->UnpinPage(root_page_id_, true);
-    UpdateRootPageId(true);
+    UpdateRootPageId(false);
     return;
   }
 
@@ -565,7 +566,7 @@ bool BPlusTree::AdjustRoot(BPlusTreePage *old_root_node) {
     root_page_id_ = INVALID_PAGE_ID;
     buffer_pool_manager_->UnpinPage(old_page_id,false);
     buffer_pool_manager_->DeletePage(old_page_id);
-    UpdateRootPageId(true);
+    UpdateRootPageId(false);
     return true;
   }
   // Case 1: Root with only one child - promote the child
@@ -582,7 +583,7 @@ void BPlusTree::AdjustInternalRoot(InternalPage *root, BPlusTreePage *node) {
   buffer_pool_manager_->UnpinPage(old_page_id, false);
   buffer_pool_manager_->DeletePage(old_page_id);
   node->SetParentPageId(INVALID_PAGE_ID);
-  UpdateRootPageId(true);
+  UpdateRootPageId(false);
 }
 
 /*****************************************************************************
