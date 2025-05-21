@@ -21,9 +21,6 @@ class Index {
 
   virtual dberr_t Destroy() = 0;
 
-  // For test
-  IndexSchema *GetKeySchema() const { return key_schema_; }
-
  protected:
   index_id_t index_id_;
   IndexSchema *key_schema_;

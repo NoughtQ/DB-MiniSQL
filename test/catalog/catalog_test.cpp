@@ -124,10 +124,6 @@ TEST(CatalogTest, CatalogIndexTest) {
                               Field(TypeId::kTypeChar, const_cast<char *>("minisql"), 7, true)};
     Row row(fields);
     RowId rid(1000, i);
-    auto vec = index_info_02->GetIndex()->GetKeySchema()->GetColumns();
-    for (auto &elem : vec) {
-      cout << elem->GetName() << endl;
-    }
     ASSERT_EQ(DB_SUCCESS, index_info_02->GetIndex()->ScanKey(row, ret_02, &txn));
     ASSERT_EQ(rid.Get(), ret_02[i].Get());
   }
