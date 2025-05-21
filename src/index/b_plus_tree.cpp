@@ -16,8 +16,18 @@ BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager
       buffer_pool_manager_(buffer_pool_manager),
       processor_(KM),
       leaf_max_size_(leaf_max_size),
-      internal_max_size_(internal_max_size) {
-  UpdateRootPageId(true);
+      internal_max_size_(internal_max_size),
+      root_page_id_(INVALID_PAGE_ID) {  // Initialize root_page_id_ to INVALID_PAGE_ID
+  // Try to load root_page_id_ from IndexRootsPage
+  Page *header_page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
+  ASSERT(header_page != nullptr, "Failed to fetch index roots page.");
+  IndexRootsPage *header = reinterpret_cast<IndexRootsPage *>(header_page->GetData());
+  if (!header->GetRootId(index_id_, &root_page_id_)) {
+    // If not found, it's a new tree or an issue, keep root_page_id_ as INVALID_PAGE_ID
+    // It will be updated by StartNewTree or similar logic if it's a new tree.
+  }
+  buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, false);
+
   int key_size = KM.GetKeySize();
   if (leaf_max_size == UNDEFINED_SIZE) {
     int pair_size = key_size + sizeof(RowId);
@@ -29,16 +39,44 @@ BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager
   }
 }
 
-void BPlusTree::Destroy(page_id_t current_page_id) {
-  if (current_page_id == INVALID_PAGE_ID) {
+void BPlusTree::Destroy(page_id_t current_page_id_param) {
+  page_id_t page_to_destroy_recursively;
+  bool is_initial_call = false;
+
+  if (current_page_id_param == INVALID_PAGE_ID) {
+    // This is the initial, non-recursive call (e.g., from user calling tree->Destroy())
+    if (root_page_id_ == INVALID_PAGE_ID) {
+      // Tree is already considered destroyed or was never initialized.
+      return; 
+    }
+    page_to_destroy_recursively = root_page_id_;
+    is_initial_call = true;
+  } else {
+    // This is a recursive call.
+    page_to_destroy_recursively = current_page_id_param;
+  }
+
+  if (page_to_destroy_recursively == INVALID_PAGE_ID) {
+    // Should not happen in recursive calls if tree structure is valid.
+    // For initial call, handled by root_page_id_ check above.
     return;
   }
 
   // Fetch the current page from buffer pool
-  Page *page = buffer_pool_manager_->FetchPage(current_page_id);
+  Page *page = buffer_pool_manager_->FetchPage(page_to_destroy_recursively);
   if (page == nullptr) {
-    LOG(ERROR) << "b_plus_tree::Destroy: page which need deleted can't fetch" << endl;
-    return;  // Page not found or error occurred
+    LOG(WARNING) << "BPlusTree::Destroy: Failed to fetch page " << page_to_destroy_recursively << " for index_id: " << index_id_;
+    // If it's the initial call and root page fetch failed, still try to clean up IndexRootsPage.
+    if (is_initial_call) {
+        Page *header_page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
+        if (header_page != nullptr) {
+            IndexRootsPage *header = reinterpret_cast<IndexRootsPage *>(header_page->GetData());
+            bool modified = header->Delete(index_id_);
+            buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, modified);
+        }
+        root_page_id_ = INVALID_PAGE_ID; // Mark as destroyed locally
+    }
+    return;
   }
 
   BPlusTreePage *node = reinterpret_cast<BPlusTreePage *>(page->GetData());
@@ -47,13 +85,26 @@ void BPlusTree::Destroy(page_id_t current_page_id) {
     // If it's an internal page, recursively destroy all child pages
     InternalPage *internal_node = reinterpret_cast<InternalPage *>(node);
     for (int i = 0; i < internal_node->GetSize(); ++i) {
-      Destroy(internal_node->ValueAt(i));
+      Destroy(internal_node->ValueAt(i)); // Recursive call
     }
   }
 
   // Clean up the current page
-  buffer_pool_manager_->UnpinPage(current_page_id, false);
-  buffer_pool_manager_->DeletePage(current_page_id);
+  buffer_pool_manager_->UnpinPage(page_to_destroy_recursively, false); // Unpin, not dirty
+  buffer_pool_manager_->DeletePage(page_to_destroy_recursively);
+
+  if (is_initial_call) {
+    // After all tree pages are recursively destroyed, remove from IndexRootsPage
+    Page *header_page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
+    if (header_page != nullptr) {
+      IndexRootsPage *header = reinterpret_cast<IndexRootsPage *>(header_page->GetData());
+      bool modified = header->Delete(index_id_);
+      buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, modified); 
+    } else {
+      LOG(ERROR) << "BPlusTree::Destroy: Failed to fetch INDEX_ROOTS_PAGE_ID for index_id: " << index_id_;
+    }
+    root_page_id_ = INVALID_PAGE_ID; // Set root_page_id_ to invalid for this instance
+  }
 }
 
 /*
@@ -685,29 +736,37 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
  * insert a record <index_name, current_page_id> into header page instead of
  * updating it.
  */
-void BPlusTree::UpdateRootPageId(int insert_record) {
-  // Fetch the header page
+void BPlusTree::UpdateRootPageId(int /* insert_record -- parameter is ignored by new logic */) {
   Page *header_page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
   if (header_page == nullptr) {
-    throw std::runtime_error("Failed to fetch header page");
+    LOG(ERROR) << "UpdateRootPageId: Failed to fetch INDEX_ROOTS_PAGE_ID for index_id: " << index_id_ 
+               << ". Root page ID update will not be persisted.";
+    return; 
   }
-
-  // Get the header page data
   IndexRootsPage *header = reinterpret_cast<IndexRootsPage *>(header_page->GetData());
+  bool modified_header = false;
 
-  if (insert_record) {
-    // Insert new record if it doesn't exist
-    if (!header->Insert(index_id_, root_page_id_)) {
-      // If insert fails (record exists), update instead
-      header->Update(index_id_, root_page_id_);
+  if (root_page_id_ == INVALID_PAGE_ID) {
+    // Tree is empty or has become empty. Attempt to delete its entry from IndexRootsPage.
+    if (header->Delete(index_id_)) {
+        modified_header = true;
     }
   } else {
-    // Update existing record
-    header->Update(index_id_, root_page_id_);
+    // Tree has a valid root. Ensure it's correctly recorded in IndexRootsPage.
+    // Try to update first. If that fails (entry doesn't exist), then insert.
+    if (header->Update(index_id_, root_page_id_)) {
+      modified_header = true; 
+    } else {
+      // Update failed, implies entry for index_id_ was not found. Attempt to insert.
+      if (header->Insert(index_id_, root_page_id_)) {
+        modified_header = true; 
+      } else {
+        LOG(ERROR) << "UpdateRootPageId: For index_id: " << index_id_ << ", root_page_id: " << root_page_id_
+                   << ", Update failed (entry not found) AND Insert also failed (likely duplicate or full). This is problematic.";
+      }
+    }
   }
-
-  // Unpin the header page with dirty flag set
-  buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, true);
+  buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, modified_header);
 }
 
 /**
