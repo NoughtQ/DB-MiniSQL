@@ -2,6 +2,7 @@
 #define MINISQL_INDEX_ITERATOR_H
 
 #include "page/b_plus_tree_leaf_page.h"
+#include<iterator>
 
 class IndexIterator {
   using LeafPage = BPlusTreeLeafPage;
