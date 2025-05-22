@@ -43,6 +43,8 @@ uint32_t IndexMetadata::SerializeTo(char *buf) const {
  * TODO: Student Implement
  */
 uint32_t IndexMetadata::GetSerializedSize() const {
+  // total size = magic num(4) + index id(4) + table id(4) + key count(4)
+  //              + index name(calculated by macro) + key mapping(size * 4)
   uint32_t serialized_size = 16 + MACH_STR_SERIALIZED_SIZE(index_name_);
   uint32_t key_map_size = key_map_.size();
   serialized_size += 4 * key_map_size;

@@ -352,6 +352,7 @@ dberr_t ExecuteEngine::ExecuteShowTables(pSyntaxNode ast, ExecuteContext *contex
 /**
  * TODO: Student Implement
  */
+// execute sql statements like "create table t1(a int, b char(20) unique, c float, primary key(a, c));"
 dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteCreateTable" << std::endl;
@@ -405,6 +406,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
 /**
  * TODO: Student Implement
  */
+// execute sql statements like "drop table t1;"
 dberr_t ExecuteEngine::ExecuteDropTable(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteDropTable" << std::endl;
@@ -416,7 +418,7 @@ dberr_t ExecuteEngine::ExecuteDropTable(pSyntaxNode ast, ExecuteContext *context
 
   auto catelog = context->GetCatalog();
   string table_name = ast->child_->val_;
-  if (catelog->DropTable(table_name)  != DB_SUCCESS) {
+  if (catelog->DropTable(table_name) != DB_SUCCESS) {
     return DB_FAILED;
   }
 
@@ -426,6 +428,7 @@ dberr_t ExecuteEngine::ExecuteDropTable(pSyntaxNode ast, ExecuteContext *context
 /**
  * TODO: Student Implement
  */
+// execute sql statement "show indexes;"
 dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteShowIndexes" << std::endl;
@@ -487,6 +490,7 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
 /**
  * TODO: Student Implement
  */
+// execute sql statements like "create index idx1 on t1(a, b) using btree;"
 dberr_t ExecuteEngine::ExecuteCreateIndex(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteCreateIndex" << std::endl;
@@ -523,6 +527,7 @@ dberr_t ExecuteEngine::ExecuteCreateIndex(pSyntaxNode ast, ExecuteContext *conte
 /**
  * TODO: Student Implement
  */
+// execute sql statements like "drop index idx1;"
 dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteDropIndex" << std::endl;
@@ -599,6 +604,7 @@ dberr_t ExecuteEngine::ExecuteTrxRollback(pSyntaxNode ast, ExecuteContext *conte
 /**
  * TODO: Student Implement
  */
+// execute sql statements like "execfile "a.txt";"
 dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteExecfile" << std::endl;
@@ -616,6 +622,7 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
     return DB_FAILED;
   }
   
+  // copy from main function(doge)
   const int buf_size = 1024;
   char buf[buf_size];
   string sql;
@@ -671,6 +678,7 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
 /**
  * TODO: Student Implement
  */
+// execute sql statement "quit;"
 dberr_t ExecuteEngine::ExecuteQuit(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteQuit" << std::endl;

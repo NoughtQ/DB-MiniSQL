@@ -28,6 +28,8 @@ uint32_t TableMetadata::SerializeTo(char *buf) const {
  * TODO: Student Implement
  */
 uint32_t TableMetadata::GetSerializedSize() const {
+  // total size = magic num(4) + table id(4) + table name(calculated by macro) 
+  //              + table heap root page id(4) + table schema(calculated by its method)
   return 4 + 4 + MACH_STR_SERIALIZED_SIZE(table_name_) + 4 + schema_->GetSerializedSize();
 }
 
