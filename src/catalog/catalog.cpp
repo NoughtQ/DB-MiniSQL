@@ -403,7 +403,7 @@ dberr_t CatalogManager::LoadTable(const table_id_t table_id, const page_id_t pag
     // create table info
     table_page_id = table_meta->GetFirstPageId();
     table_schema = table_meta->GetSchema();
-    table_heap = table_heap->Create(buffer_pool_manager_, page_id, table_schema, log_manager_, lock_manager_);
+    table_heap = table_heap->Create(buffer_pool_manager_, table_page_id, table_schema, log_manager_, lock_manager_);
     table_info = table_info->Create();
     table_info->Init(table_meta, table_heap);
     
