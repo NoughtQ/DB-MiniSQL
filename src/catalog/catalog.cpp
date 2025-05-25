@@ -297,7 +297,7 @@ dberr_t CatalogManager::GetIndex(const std::string &table_name, const std::strin
  */
 dberr_t CatalogManager::GetTableIndexes(const std::string &table_name, std::vector<IndexInfo *> &indexes) const {
   // check if the specified table exists
-  if (table_names_.count(table_name) == 0)
+  if (index_names_.count(table_name) == 0)
     return DB_TABLE_NOT_EXIST;
 
   // ensure that variable indexes has enough space for all indexes in the table
