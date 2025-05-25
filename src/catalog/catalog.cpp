@@ -83,15 +83,14 @@ CatalogManager::CatalogManager(BufferPoolManager *buffer_pool_manager, LockManag
   index_names_.clear();
   indexes_.clear();
 
-  // fetch catalog meta page from the disk
-  Page* page = buffer_pool_manager->FetchPage(CATALOG_META_PAGE_ID);
-  char* buf = page->GetData();
-
   if (init) {
     // initialize(create) the catalog meta
     catalog_meta_ = CatalogMeta::NewInstance();
-    catalog_meta_->SerializeTo(buf);
+    // catalog_meta_->SerializeTo(buf);
   } else {
+    // fetch catalog meta page from the disk
+    Page* page = buffer_pool_manager->FetchPage(CATALOG_META_PAGE_ID);
+    char* buf = page->GetData();
     // load the catalog meta from the buffer pool
     catalog_meta_ = catalog_meta_->DeserializeFrom(buf);
     // load table meta pages
@@ -102,8 +101,8 @@ CatalogManager::CatalogManager(BufferPoolManager *buffer_pool_manager, LockManag
     for (const auto& index_meta_page: catalog_meta_->index_meta_pages_) {
       LoadIndex(index_meta_page.first, index_meta_page.second);
     }
+    buffer_pool_manager->UnpinPage(CATALOG_META_PAGE_ID, false);
   }
-  // buffer_pool_manager->UnpinPage(CATALOG_META_PAGE_ID, true);
 }
 
 CatalogManager::~CatalogManager() {
@@ -185,11 +184,12 @@ dberr_t CatalogManager::GetTable(const string &table_name, TableInfo *&table_inf
  * TODO: Student Implement
  */
 dberr_t CatalogManager::GetTables(vector<TableInfo *> &tables) const {
-  if (tables.size() == 0)
-    return DB_FAILED;
+  // if (tables.size() == 0)
+  //   return DB_FAILED;
 
   // ensure that variable tables has enough space for all tables in db
   tables.resize(tables_.size());
+  tables.clear();
   // get all table info
   for (const auto& table : tables_)
     tables.push_back(table.second);
@@ -232,7 +232,7 @@ dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string 
     char *buf;
 
     // get new pages from buffer pool for index data
-    index_page = buffer_pool_manager_->NewPage(index_page_id);
+    // index_page = buffer_pool_manager_->NewPage(index_page_id);
     index_meta_page = buffer_pool_manager_->NewPage(page_id);
     
     // obtain key_map
@@ -251,12 +251,15 @@ dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string 
     index_info->Init(index_meta, table_info, buffer_pool_manager_);
 
     // update catalog manager
-    index_name_to_index[index_name] = index_id;
-    index_names_[table_name] = index_name_to_index;
+    // If the table does not have any indexes yet, create a new map for it
+    if (index_names_.find(table_name) == index_names_.end()) {
+      index_names_[table_name] = std::unordered_map<std::string, index_id_t>();
+    }
+    index_names_[table_name][index_name] = index_id;
     indexes_[index_id] = index_info;
 
     // update catalog metadata
-    catalog_meta_->index_meta_pages_[table_id] = page_id;
+    catalog_meta_->index_meta_pages_[index_id] = page_id;
     catalog_meta_page = buffer_pool_manager_->FetchPage(CATALOG_META_PAGE_ID);
     buf = catalog_meta_page->GetData();
     catalog_meta_->SerializeTo(buf);
@@ -293,15 +296,13 @@ dberr_t CatalogManager::GetIndex(const std::string &table_name, const std::strin
  * TODO: Student Implement
  */
 dberr_t CatalogManager::GetTableIndexes(const std::string &table_name, std::vector<IndexInfo *> &indexes) const {
-  if (indexes.size() == 0)
-    return DB_FAILED;
-
   // check if the specified table exists
   if (table_names_.count(table_name) == 0)
     return DB_TABLE_NOT_EXIST;
 
   // ensure that variable indexes has enough space for all indexes in the table
   indexes.resize(indexes_.size());
+  indexes.clear();
   // get all index info in the table
   auto index_list = index_names_.at(table_name);
   for (const auto& index : index_list)
@@ -431,7 +432,6 @@ dberr_t CatalogManager::LoadIndex(const index_id_t index_id, const page_id_t pag
     TableMetadata *table_meta = nullptr;
     TableInfo *table_info = nullptr;
 
-    index_id_t index_id;
     IndexMetadata *index_meta = nullptr;
     IndexInfo *index_info = nullptr;
 
@@ -455,6 +455,10 @@ dberr_t CatalogManager::LoadIndex(const index_id_t index_id, const page_id_t pag
     // update catalog manager
     std::string index_name = index_meta->GetIndexName();
     std::string table_name = table_info->GetTableName();
+    // If the table does not have any indexes yet in index_names_ (e.g., during loading), create a new map for it
+    if (index_names_.find(table_name) == index_names_.end()) {
+      index_names_[table_name] = std::unordered_map<std::string, index_id_t>();
+    }
     index_names_[table_name][index_name] = index_id;
     indexes_[index_id] = index_info;
 
