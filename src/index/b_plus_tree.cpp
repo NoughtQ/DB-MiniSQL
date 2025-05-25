@@ -144,7 +144,7 @@ bool BPlusTree::GetValue(const GenericKey *key, std::vector<RowId> &result, Txn 
   RowId row_id;
   bool found = leaf->Lookup(key, row_id, processor_);
 
-  buffer_pool_manager_->UnpinPage(page_id, false);
+  buffer_pool_manager_->UnpinPage(leaf->GetPageId(), false);
 
   if (found) {
     result.push_back(row_id);
