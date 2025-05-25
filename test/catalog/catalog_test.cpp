@@ -4,6 +4,8 @@
 #include "gtest/gtest.h"
 #include "utils/utils.h"
 
+#include <cstring>
+
 static string db_file_name = "catalog_test.db";
 
 TEST(CatalogTest, CatalogMetaTest) {
