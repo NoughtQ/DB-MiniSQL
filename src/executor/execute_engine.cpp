@@ -5,6 +5,7 @@
 #include <sys/types.h>
 
 #include <chrono>
+#include <cstdlib>
 
 #include "common/result_writer.h"
 
@@ -364,40 +365,106 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
 
   auto catelog = context->GetCatalog();
   string table_name = ast->child_->val_;
+  Column *column;
   vector<Column *> columns;
+  set<string> primary_keys;
   auto node = ast->child_->next_->child_;
-  auto table_idx = 0;
-
+  int table_idx = 0;
+  int char_len;
+  
+  // check if there is a primary key constraint
   while (node) {
+    if (node->type_ == kNodeColumnList) {
+      if (string(node->val_) == "primary keys") {
+          auto cur = node->child_;
+          while (cur) {
+            primary_keys.insert(cur->val_);
+            cur = cur->next_;
+          }
+      }
+      break;
+    }
+    node = node->next_;
+  }
+
+  // collect all columns
+  node = ast->child_->next_->child_;
+  while (node) {
+    if (node->type_ != kNodeColumnDefinition) {
+      node = node->next_;
+      continue;
+    }
+
     string column_name = node->child_->val_;
     string column_type = node->child_->next_->val_;
     bool is_unique = false;
     bool is_null = false;
+
+    // integrity constraints
     if (node->val_ != NULL) {
-      if (string(node->val_) == "unique")
+      if (string(node->val_) == "unique") {
         is_unique = true;
+      }
       if (string(node->val_) == "is null")
         is_null = true;
+    } else if (primary_keys.count(column_name) != 0) {
+      is_unique = true;
+      is_null = true;
     }
 
+    // column types
     auto type = kTypeInvalid;  
     if (column_type == "int")
       type = kTypeInt;
-    else if (column_type == "char")
+    else if (column_type == "char") {
       type = kTypeChar;
+      char_len = atoi(node->child_->next_->child_->val_);
+    }
     else if (column_type == "float")
       type = kTypeFloat;
     
-    auto column = new Column(column_name, type, table_idx, is_null, is_unique);
+    // create a new column
+    if (type != kTypeChar) {
+      column = new Column(column_name, type, table_idx, is_null, is_unique);
+    } else {
+      column = new Column(column_name, type, char_len, table_idx, is_null, is_unique);
+    }
     columns.push_back(column);
     ++table_idx;
+
     node = node->next_;
   }
 
+  // create a new table
   auto schema = new Schema(columns);
   TableInfo *table_info;
-  if (catelog->CreateTable(table_name, schema, nullptr, table_info)  != DB_SUCCESS) {
-    return DB_FAILED;
+  auto err_msg = catelog->CreateTable(table_name, schema, nullptr, table_info);
+  if (err_msg != DB_SUCCESS) {
+    return err_msg;
+  }
+
+  // create index for primary keys
+  if (!primary_keys.empty()) {
+    auto pk_index_name = "pk_" + table_name;
+    IndexInfo *pk_index_info;
+    vector<string> pk_index_keys(primary_keys.begin(), primary_keys.end());
+    if (catelog->CreateIndex(table_name, pk_index_name, pk_index_keys, nullptr, pk_index_info, "btree") != DB_SUCCESS) {
+      LOG(WARNING) << "Failed to create primary key index for table " << table_name;
+      return DB_FAILED;
+    }
+  }
+
+  // create unique indexes for columns
+  for (const auto& col : columns) {
+    if (col->IsUnique() && primary_keys.count(col->GetName()) == 0) {
+      vector<string> uq_col_name = {col->GetName()};
+      auto uq_index_name = "uk_" + table_name + "_" + col->GetName();
+      IndexInfo *uq_index_info;
+      if (catelog->CreateIndex(table_name, uq_index_name, uq_col_name, nullptr, uq_index_info, "btree") != DB_SUCCESS) {
+        LOG(WARNING) << "Failed to create unique index for column " << col->GetName() << " in table " << table_name;
+        return DB_FAILED;
+      }
+    }
   }
   
   return DB_SUCCESS;
@@ -418,8 +485,24 @@ dberr_t ExecuteEngine::ExecuteDropTable(pSyntaxNode ast, ExecuteContext *context
 
   auto catelog = context->GetCatalog();
   string table_name = ast->child_->val_;
-  if (catelog->DropTable(table_name) != DB_SUCCESS) {
-    return DB_FAILED;
+
+  // drop all indexes of the table first
+  vector<IndexInfo *> indexes;
+  catelog->GetTableIndexes(table_name, indexes);
+  for (const auto &index : indexes) {
+    auto index_name = index->GetIndexName();
+    auto err_msg = catelog->DropIndex(table_name, index_name);
+    if (err_msg != DB_SUCCESS) {
+      cout << "Failed to drop index " << index_name << endl;
+      return err_msg;
+    }
+  }
+
+  // then drop the table
+  auto err_msg = catelog->DropTable(table_name);
+  if (err_msg != DB_SUCCESS) {
+    cout << "Failed to drop table " << table_name << endl;
+    return err_msg;
   }
 
   return DB_SUCCESS;
@@ -455,26 +538,31 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
   bool has_index = false;
   for (const auto &table_name : table_names) {
     if (dbs_[current_db_]->catalog_mgr_->GetTableIndexes(table_name, indexes) == DB_SUCCESS) {
-      has_index = true;
+      if (indexes.size() > 0)
+        has_index = true;
       table_name2indexes[table_name] = indexes;
     }
+    if (string("Index in " + table_name).length() > max_width) 
+        max_width = string("Index in " + table_name).length();
     for (const auto &index : indexes) {
       if (index->GetIndexName().length() > max_width) 
         max_width = index->GetIndexName().length();
     }
   }
+  // no index found
   if (!has_index) {
     cout << "Empty set (0.00 sec)" << endl;
     return DB_FAILED;
   }
 
+  // formatting
   cout << "+" << setfill('-') << setw(max_width + 2) << ""
        << "+" << endl;
   cout << "| " << std::left << setfill(' ') << setw(max_width) << index_in_db << " |" << endl;
   cout << "+" << setfill('-') << setw(max_width + 2) << ""
        << "+" << endl;
   for (const auto &t2i : table_name2indexes) {
-    cout << "| " << std::left << setfill(' ') << setw(max_width) << "Index in " << t2i.first << " |" << endl;
+    cout << "| " << std::left << setfill(' ') << setw(max_width) << "Index in " + t2i.first << " |" << endl;
     cout << "+" << setfill('-') << setw(max_width + 2) << ""
     << "+" << endl;
     for (const auto &index : t2i.second) {
@@ -536,8 +624,9 @@ dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context
     cout << "No database selected" << endl;
     return DB_FAILED;
   }
+
   auto catelog = context->GetCatalog();
-  string index_name = ast->child_->next_->val_;
+  string index_name = ast->child_->val_;
   string table_name = "";
   vector<TableInfo *> tables;
   vector<IndexInfo *> indexes;
@@ -549,17 +638,19 @@ dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context
     table_names.push_back(table->GetTableName());
 
   for (const auto &tn : table_names) {
-    if (dbs_[current_db_]->catalog_mgr_->GetTableIndexes(table_name, indexes) == DB_SUCCESS) {
+    // find the corresponding table name of the index
+    if (dbs_[current_db_]->catalog_mgr_->GetTableIndexes(tn, indexes) == DB_SUCCESS) {
       for (const auto &index : indexes) {
         if (index->GetIndexName() == index_name) {
           table_name = tn;
           break;
         }
       }
-    }
+    } 
   }
 
-  if (catelog->DropIndex(table_name, index_name)  != DB_SUCCESS) {
+  if (catelog->DropIndex(table_name, index_name) != DB_SUCCESS) {
+    cout << "Failed to drop the index!" << endl;
     return DB_FAILED;
   }
   return DB_SUCCESS;
@@ -621,20 +712,32 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
     cout << "File not found" << endl;
     return DB_FAILED;
   }
-  
-  // copy from main function(doge)
-  const int buf_size = 1024;
-  char buf[buf_size];
-  string sql;
-  // executor engine
-  ExecuteEngine engine;
+
   // for print syntax tree
   TreeFileManagers syntax_tree_file_mgr("syntax_tree_");
   uint32_t syntax_tree_id = 0;
+  char ch;
+  const int buf_size = 1024;
+  char sql[buf_size];
+  int i;
 
-  while (getline(file, sql)) {
+  // start timing
+  auto start_time = chrono::system_clock::now();
+  while (!file.eof()) {
+    i = 0;
+    while (!file.eof() && (ch = file.get()) != ';')
+      sql[i++] = ch;
+      
+    if (file.eof())
+      continue;
+  
+    sql[i++] = ch;     // ;
+    sql[i] = '\0';     // don't forget it!
+
+    cout << sql << endl;
     // create buffer for sql input
-    YY_BUFFER_STATE bp = yy_scan_string(sql.c_str());
+    YY_BUFFER_STATE bp = yy_scan_string(sql);
+
     if (bp == nullptr) {
       LOG(ERROR) << "Failed to create yy buffer state." << std::endl;
       exit(1);
@@ -653,12 +756,12 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
       printf("%s\n", MinisqlParserGetErrorMessage());
     } else {
       // Comment them out if you don't need to debug the syntax tree
-      printf("[INFO] Sql syntax parse ok!\n");
-      SyntaxTreePrinter printer(MinisqlGetParserRootNode());
-      printer.PrintTree(syntax_tree_file_mgr[syntax_tree_id++]);
+      // printf("[INFO] Sql syntax parse ok!\n");
+      // SyntaxTreePrinter printer(MinisqlGetParserRootNode());
+      // printer.PrintTree(syntax_tree_file_mgr[syntax_tree_id++]);
     }
 
-    auto result = engine.Execute(MinisqlGetParserRootNode());
+    auto result = Execute(MinisqlGetParserRootNode());
 
     // clean memory after parse
     MinisqlParserFinish();
@@ -666,11 +769,17 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
     yylex_destroy();
 
     // quit condition
-    engine.ExecuteInformation(result);
+    ExecuteInformation(result);
     if (result == DB_QUIT) {
       break;
     }
   }
+  // end timing
+  auto stop_time = chrono::system_clock::now();
+  double duration_time =
+      double((chrono::duration_cast<chrono::milliseconds>(stop_time - start_time)).count());
+  cout << "Execfile finished in " << duration_time << " ms" << endl;
+  file.close();
 
   return DB_SUCCESS;
 }
@@ -683,11 +792,6 @@ dberr_t ExecuteEngine::ExecuteQuit(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteQuit" << std::endl;
 #endif
-  if (current_db_.empty()) {
-    cout << "No database selected" << endl;
-    return DB_FAILED;
-  }
-
   current_db_.clear();
-  return DB_SUCCESS;
+  return DB_QUIT;
 }
