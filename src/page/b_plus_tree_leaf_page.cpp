@@ -144,8 +144,7 @@ int LeafPage::Insert(GenericKey *key, const RowId &value, const KeyManager &KM) 
 /*****************************************************************************
  * SPLIT
  *****************************************************************************/
-// auua: 很奇怪，我觉得recipient应该和该节点比较一下大小，区分应该移动前一半还是后一半...
-// auua: 另外，移动一半，这里选择移出去的部分大于等于剩下的
+// auua: 移动一半，这里选择移出去的部分大于等于剩下的
 /*
  * Remove half of key & value pairs from this page to "recipient" page
  */
