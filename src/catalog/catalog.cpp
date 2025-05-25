@@ -328,8 +328,14 @@ dberr_t CatalogManager::DropTable(const string &table_name) {
     return DB_FAILED;
 
   // delete and deallocate table info
+  // page_id_t page_id = catalog_meta_->table_meta_pages_[table_id];
+  // buffer_pool_manager_->UnpinPage(page_id, true);
+  // buffer_pool_manager_->DeletePage(page_id);
+
   TableInfo* table = tables_[table_id];
   tables_.erase(table_id);
+  catalog_meta_->table_meta_pages_.erase(table_id);
+  
   delete table;
 
   return DB_SUCCESS;
@@ -345,7 +351,7 @@ dberr_t CatalogManager::DropIndex(const string &table_name, const string &index_
   
   if (index_names_.count(table_name) == 1) {
     auto index_list = index_names_.at(table_name);
-    if (index_list.count(index_name) == 0) 
+    if (index_list.count(index_name) == 0)
       return DB_INDEX_NOT_FOUND;
   } else {
     return DB_FAILED;
@@ -360,8 +366,14 @@ dberr_t CatalogManager::DropIndex(const string &table_name, const string &index_
     return DB_FAILED;
 
   // delete and deallocate index info
+  // page_id_t page_id = catalog_meta_->index_meta_pages_[index_id];
+  // buffer_pool_manager_->UnpinPage(page_id, true);
+  // buffer_pool_manager_->DeletePage(page_id);
+
   IndexInfo *index_info = indexes_[index_id];
   indexes_.erase(index_id);
+  catalog_meta_->index_meta_pages_.erase(index_id);
+
   delete index_info;
 
   return DB_SUCCESS;
