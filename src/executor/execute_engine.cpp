@@ -372,6 +372,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
   int table_idx = 0;
   int char_len;
   
+  // check if there is a primary key constraint
   while (node) {
     if (node->type_ == kNodeColumnList) {
       if (string(node->val_) == "primary keys") {
@@ -386,6 +387,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
     node = node->next_;
   }
 
+  // collect all columns
   node = ast->child_->next_->child_;
   while (node) {
     if (node->type_ != kNodeColumnDefinition) {
@@ -397,6 +399,8 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
     string column_type = node->child_->next_->val_;
     bool is_unique = false;
     bool is_null = false;
+
+    // integrity constraints
     if (node->val_ != NULL) {
       if (string(node->val_) == "unique") {
         is_unique = true;
@@ -408,6 +412,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
       is_null = true;
     }
 
+    // column types
     auto type = kTypeInvalid;  
     if (column_type == "int")
       type = kTypeInt;
@@ -418,6 +423,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
     else if (column_type == "float")
       type = kTypeFloat;
     
+    // create a new column
     if (type != kTypeChar) {
       column = new Column(column_name, type, table_idx, is_null, is_unique);
     } else {
@@ -429,6 +435,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
     node = node->next_;
   }
 
+  // create a new table
   auto schema = new Schema(columns);
   TableInfo *table_info;
   auto err_msg = catelog->CreateTable(table_name, schema, nullptr, table_info);
@@ -436,7 +443,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
     return err_msg;
   }
 
-  // Create index for primary keys
+  // create index for primary keys
   if (!primary_keys.empty()) {
     auto pk_index_name = "pk_" + table_name;
     IndexInfo *pk_index_info;
@@ -447,7 +454,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
     }
   }
 
-  // Create unique indexes for columns
+  // create unique indexes for columns
   for (const auto& col : columns) {
     if (col->IsUnique() && primary_keys.count(col->GetName()) == 0) {
       vector<string> uq_col_name = {col->GetName()};
@@ -479,6 +486,7 @@ dberr_t ExecuteEngine::ExecuteDropTable(pSyntaxNode ast, ExecuteContext *context
   auto catelog = context->GetCatalog();
   string table_name = ast->child_->val_;
 
+  // drop all indexes of the table first
   vector<IndexInfo *> indexes;
   catelog->GetTableIndexes(table_name, indexes);
   for (const auto &index : indexes) {
@@ -490,6 +498,7 @@ dberr_t ExecuteEngine::ExecuteDropTable(pSyntaxNode ast, ExecuteContext *context
     }
   }
 
+  // then drop the table
   auto err_msg = catelog->DropTable(table_name);
   if (err_msg != DB_SUCCESS) {
     cout << "Failed to drop table " << table_name << endl;
@@ -540,11 +549,13 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
         max_width = index->GetIndexName().length();
     }
   }
+  // no index found
   if (!has_index) {
     cout << "Empty set (0.00 sec)" << endl;
     return DB_FAILED;
   }
 
+  // formatting
   cout << "+" << setfill('-') << setw(max_width + 2) << ""
        << "+" << endl;
   cout << "| " << std::left << setfill(' ') << setw(max_width) << index_in_db << " |" << endl;
@@ -627,6 +638,7 @@ dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context
     table_names.push_back(table->GetTableName());
 
   for (const auto &tn : table_names) {
+    // find the corresponding table name of the index
     if (dbs_[current_db_]->catalog_mgr_->GetTableIndexes(tn, indexes) == DB_SUCCESS) {
       for (const auto &index : indexes) {
         if (index->GetIndexName() == index_name) {
@@ -637,7 +649,7 @@ dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context
     } 
   }
 
-  if (catelog->DropIndex(table_name, index_name)  != DB_SUCCESS) {
+  if (catelog->DropIndex(table_name, index_name) != DB_SUCCESS) {
     cout << "Failed to drop the index!" << endl;
     return DB_FAILED;
   }
@@ -709,6 +721,7 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
   char sql[buf_size];
   int i;
 
+  // start timing
   auto start_time = chrono::system_clock::now();
   while (!file.eof()) {
     i = 0;
@@ -719,7 +732,7 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
       continue;
   
     sql[i++] = ch;     // ;
-    sql[i] = '\0';
+    sql[i] = '\0';     // don't forget it!
 
     cout << sql << endl;
     // create buffer for sql input
@@ -761,6 +774,7 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
       break;
     }
   }
+  // end timing
   auto stop_time = chrono::system_clock::now();
   double duration_time =
       double((chrono::duration_cast<chrono::milliseconds>(stop_time - start_time)).count());
