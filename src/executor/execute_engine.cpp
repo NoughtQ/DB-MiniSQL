@@ -700,11 +700,6 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteExecfile" << std::endl;
 #endif
-  if (current_db_.empty()) {
-    cout << "No database selected" << endl;
-    return DB_FAILED;
-  }
-
   string file_name = ast->child_->val_;
   fstream file;
   file.open(file_name);
