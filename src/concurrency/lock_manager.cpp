@@ -216,28 +216,57 @@ void LockManager::CheckAbort(Txn *txn, LockManager::LockRequestQueue &req_queue)
 /**
  * TODO: Student Implement
  */
-void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) { waits_for_[t1].insert(t2); }
+void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {
+    waits_for_[t1].insert(t2);
+    visited_set_.clear();
+    while (!visited_path_.empty())
+        visited_path_.pop();
+}
 
 /**
  * TODO: Student Implement
  */
-void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) { waits_for_[t1].erase(t2); }
+void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
+    waits_for_[t1].erase(t2);
+    visited_set_.clear();
+    while (!visited_path_.empty())
+        visited_path_.pop();
+}
 
 /**
  * TODO: Student Implement
  */
 bool LockManager::HasCycle(txn_id_t &newest_tid_in_cycle) {
     auto& tid = newest_tid_in_cycle;                // avoid using lengthy name
+    bool flag = false;
 
-    // find the cycle!
-    if (visited_set_.count(tid) > 0) {
-        auto youngest_tid = tid;
-        for (const auto& elem : visited_set_) {
-            if (elem < youngest_tid) {
-                youngest_tid = elem;
+    // initial case
+    if (tid == INVALID_TXN_ID) {
+        for (const auto& pair : waits_for_) {
+            txn_id_t valid_tid = pair.first;
+            if (HasCycle(valid_tid)) {
+                tid = valid_tid;
+                return true;
             }
         }
-        tid = youngest_tid;    // set the youngest tid
+    }
+
+    // find the cycle!
+    if (visited_set_.count(tid)) {
+        // std::cout << "tid: " << tid << std::endl;
+        std::stack<txn_id_t> tmp_visited_set = visited_path_;
+        auto newest_tid = tid;
+        while (!tmp_visited_set.empty()) {
+            auto t = tmp_visited_set.top();
+            tmp_visited_set.pop();
+            if (t > newest_tid) newest_tid = t;
+            if (t == tid) break;
+        }
+        
+        tid = newest_tid;    // set the youngest tid
+        // visited_set_.clear();
+        // while (!visited_path_.empty())
+        //     visited_path_.pop();       
         return true;
     }
 
@@ -246,18 +275,21 @@ bool LockManager::HasCycle(txn_id_t &newest_tid_in_cycle) {
     visited_path_.push(tid);
 
     // dfs
-    for (const auto& next_tid : waits_for_[tid]) {
-        txn_id_t temp_tid = next_tid;  // Create a non-const copy
-        if (HasCycle(temp_tid)) {
-            newest_tid_in_cycle = temp_tid;
-            return true;
+    if (waits_for_.count(tid)) {
+        for (const auto& next_tid : waits_for_[tid]) {
+            txn_id_t temp_tid = next_tid;  // Create a non-const copy
+            if (HasCycle(temp_tid)) {
+                tid = temp_tid;
+                visited_path_.pop();
+                visited_set_.erase(tid);
+                return true;
+            }
         }
     }
 
     // backtrack
     visited_path_.pop();
     visited_set_.erase(tid);
-
     return false;
 }
 
@@ -288,33 +320,37 @@ void LockManager::DeleteNode(txn_id_t txn_id) {
  */
 void LockManager::RunCycleDetection() {
     while (enable_cycle_detection_) {
-        std::this_thread::sleep_for(cycle_detection_interval_);
-        
-        // clear previous detection state
-        visited_set_.clear();
-        while (!visited_path_.empty()) {
-            visited_path_.pop();
-        }
-        
-        // check each transaction for cycles
-        std::vector<txn_id_t> txn_ids;
-        for (const auto& pair : waits_for_) {
-            txn_ids.push_back(pair.first);
-        }
-        std::sort(txn_ids.begin(), txn_ids.end());
-        
-        for (const auto& tid : txn_ids) {
-            txn_id_t newest_tid = tid;
-            if (HasCycle(newest_tid)) {
-                // abort the youngest transaction in the cycle
-                auto* txn = txn_mgr_->GetTransaction(newest_tid);
-                if (txn != nullptr) {
-                    txn_mgr_->Abort(txn);
-                    DeleteNode(newest_tid);
+        waits_for_.clear();
+
+        // create wait-for graph from lock table
+        for (const auto &kv : lock_table_) {
+            auto &req_list = kv.second.req_list_;
+            // tranverse the req_list in reverse order
+            for (auto ri = req_list.rbegin(); ri != req_list.rend(); ++ri) {
+                if (ri->granted_ == LockMode::kNone) 
+                    break;
+                for (auto rj = ri; rj != req_list.rend(); rj++) {
+                    if ((rj->granted_ == LockMode::kNone) &&
+                        ((ri->lock_mode_ == LockMode::kShared && rj->lock_mode_ == LockMode::kExclusive) || (ri->lock_mode_ == LockMode::kExclusive))) {
+                            AddEdge(rj->txn_id_, ri->txn_id_);
+                    }
                 }
-                break;
             }
         }
+
+        // clear records of visited nodes
+        visited_set_.clear();
+        while (!visited_path_.empty()) visited_path_.pop();
+
+        // deadlock detection
+        txn_id_t newest_tid_in_cycle = INVALID_TXN_ID;
+        if (HasCycle(newest_tid_in_cycle)) {
+            txn_mgr_->Abort(txn_mgr_->GetTransaction(newest_tid_in_cycle));
+            DeleteNode(newest_tid_in_cycle);
+        }
+
+        // wait for some intervals
+        std::this_thread::sleep_for(cycle_detection_interval_);
     }
 }
 
