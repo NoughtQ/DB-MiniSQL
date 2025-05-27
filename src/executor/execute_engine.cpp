@@ -605,7 +605,7 @@ dberr_t ExecuteEngine::ExecuteCreateIndex(pSyntaxNode ast, ExecuteContext *conte
     index_type = ast->child_->next_->next_->next_->val_;
 
   IndexInfo *index_info;
-  if (catelog->CreateIndex(table_name, index_name, index_keys, nullptr, index_info, index_type)  != DB_SUCCESS) {
+  if (catelog->CreateIndex(table_name, index_name, index_keys, nullptr, index_info, index_type) != DB_SUCCESS) {
     return DB_FAILED;
   }  
 
@@ -754,11 +754,6 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
     if (MinisqlParserGetError()) {
       // error
       printf("%s\n", MinisqlParserGetErrorMessage());
-    } else {
-      // Comment them out if you don't need to debug the syntax tree
-      // printf("[INFO] Sql syntax parse ok!\n");
-      // SyntaxTreePrinter printer(MinisqlGetParserRootNode());
-      // printer.PrintTree(syntax_tree_file_mgr[syntax_tree_id++]);
     }
 
     auto result = Execute(MinisqlGetParserRootNode());
