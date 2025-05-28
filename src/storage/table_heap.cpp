@@ -342,7 +342,7 @@ TableIterator TableHeap::Begin(Txn *txn) {
     // 如果没有找到有效元组，返回End迭代器
     page->RUnlatch();
     buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
-    LOG(WARNING) << "Failed to find a valid tuple when get Begin iterator" << std::endl;
+    //LOG(WARNING) << "Failed to find a valid tuple when get Begin iterator" << std::endl;
     return End();
 }
 

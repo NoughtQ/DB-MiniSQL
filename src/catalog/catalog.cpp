@@ -219,7 +219,7 @@ dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string 
     table_id_t table_id = table_names_[table_name];
     TableInfo *table_info = tables_[table_id];
     TableMetadata *table_meta = nullptr;
-    TableHeap *table_heap = nullptr;
+    TableHeap *table_heap = table_info->GetTableHeap();
     TableSchema *table_schema = table_info->GetSchema();
 
     std::unordered_map<std::string, index_id_t> index_name_to_index;
@@ -250,6 +250,16 @@ dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string 
     buffer_pool_manager_->UnpinPage(page_id, true);
     index_info = index_info->Create();
     index_info->Init(index_meta, table_info, buffer_pool_manager_);
+    
+    // Get the table iterator for all records in the table
+    key_schema = index_info->GetIndexKeySchema();
+    for (TableIterator it = table_heap->Begin(nullptr); it != table_heap->End(); ++it) {
+        // Get the current row and insert its key into the index
+        Row row = *it;
+        Row key_row;
+        row.GetKeyFromRow(table_schema, key_schema, key_row);
+        index_info->GetIndex()->InsertEntry(key_row, row.GetRowId(), nullptr);
+    }
 
     // update catalog manager
     // If the table does not have any indexes yet, create a new map for it
