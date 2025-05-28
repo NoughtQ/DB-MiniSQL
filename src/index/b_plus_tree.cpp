@@ -139,36 +139,20 @@ bool BPlusTree::IsEmpty() const {
 bool BPlusTree::GetValue(const GenericKey *key, std::vector<RowId> &result, Txn *transaction) {
   if (IsEmpty()) return false;
 
-  page_id_t page_id = root_page_id_;
-  while (true) {
-    Page *page = buffer_pool_manager_->FetchPage(page_id);
-    if (page == nullptr) {
-      return false;  // Failed to fetch page
-    }
-    BPlusTreePage *node = reinterpret_cast<BPlusTreePage *>(page->GetData());
-    if (node->IsLeafPage()) {
-      LeafPage *leaf = reinterpret_cast<LeafPage *>(node);
-      RowId row_id;
-      bool found = leaf->Lookup(key, row_id, processor_);
+  Page *leaf_page = FindLeafPage(key, root_page_id_, false);
+  LeafPage *leaf = reinterpret_cast<LeafPage *>(leaf_page);
+  RowId row_id;
+  bool found = leaf->Lookup(key, row_id, processor_);
 
-      buffer_pool_manager_->UnpinPage(page_id, false);
+  buffer_pool_manager_->UnpinPage(leaf->GetPageId(), false);
 
-      if (found) {
-        // result.clear();  // Ensure vector is clean before adding result
-        result.push_back(row_id);
-        return true;
-      }
-
-      return false;
-    } else {
-      InternalPage *internal = reinterpret_cast<InternalPage *>(node);
-      page_id_t next_page_id = internal->Lookup(key, processor_);
-
-      buffer_pool_manager_->UnpinPage(page_id, false);
-
-      page_id = next_page_id;
-    }
+  if (found) {
+    result.push_back(row_id);
+    return true;
   }
+
+  return false;
+    
 }
 
 /*****************************************************************************
@@ -681,11 +665,6 @@ IndexIterator BPlusTree::Begin(const GenericKey *key) {
  */
 IndexIterator BPlusTree::End() {
   if (IsEmpty()) return IndexIterator();
-  /* Page *leaf_page = FindLeafPage(nullptr, root_page_id_, false, true);
-  LeafPage *leaf_node = reinterpret_cast<LeafPage*>(leaf_page->GetData());
-  page_id_t t_page_id = leaf_node->GetPageId();
-  int index = leaf_node->GetSize()-1;
-  buffer_pool_manager_->UnpinPage(t_page_id, true); */
   return IndexIterator(INVALID_PAGE_ID, buffer_pool_manager_, 0);
 }
 
@@ -698,7 +677,7 @@ IndexIterator BPlusTree::End() {
  * the left most leaf page
  * Note: the leaf page is pinned, you need to unpin it after use.
  */
-Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool leftMost, bool rightMost) {
+Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool leftMost) {
   // Find the appropriate leaf page
   page_id_t current_page_id = page_id;
   Page *current_page = nullptr;
@@ -716,12 +695,10 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
       InternalPage *internal_node = reinterpret_cast<InternalPage *>(current_node);
 
       page_id_t next_page_id;
-      if (!(leftMost | rightMost))
+      if (!leftMost)
         next_page_id = internal_node->Lookup(key, processor_);
-      else if (leftMost)
-        next_page_id = internal_node->ValueAt(0);
       else
-        next_page_id = internal_node->ValueAt(internal_node->GetSize() - 1);
+        next_page_id = internal_node->ValueAt(0);
 
       buffer_pool_manager_->UnpinPage(current_page_id, false);
       current_page_id = next_page_id;
