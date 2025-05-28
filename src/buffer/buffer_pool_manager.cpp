@@ -168,7 +168,7 @@ bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
 bool BufferPoolManager::FlushPage(page_id_t page_id) {
     auto it = page_table_.find(page_id);
     if(it == page_table_.end()) {
-        LOG(ERROR) << "Cannot flush page " << page_id << ": not found" << endl;
+        // LOG(ERROR) << "Cannot flush page " << page_id << ": not found" << endl;
         return false;
     }
     frame_id_t frame_id = it->second;
