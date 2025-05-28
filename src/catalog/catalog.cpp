@@ -134,17 +134,18 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
     char *buf;
 
     // get new pages from buffer pool for table data
-    table_page = buffer_pool_manager_->NewPage(table_page_id);
+    //table_page = buffer_pool_manager_->NewPage(table_page_id);
     table_meta_page = buffer_pool_manager_->NewPage(page_id);
     
     // deep copy from passed schema
     table_schema = table_schema->DeepCopySchema(schema);
   
     // create and initialize new table info
+    table_heap = table_heap->Create(buffer_pool_manager_, table_schema, txn, log_manager_, lock_manager_);
+    table_page_id = table_heap->GetFirstPageId();
     table_meta = table_meta->Create(table_id, table_name, table_page_id, table_schema);
     table_meta->SerializeTo(table_meta_page->GetData());
     buffer_pool_manager_->UnpinPage(page_id, true);
-    table_heap = table_heap->Create(buffer_pool_manager_, table_schema, txn, log_manager_, lock_manager_);
     table_info = table_info->Create();
     table_info->Init(table_meta, table_heap);
 

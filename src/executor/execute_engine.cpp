@@ -37,9 +37,9 @@ ExecuteEngine::ExecuteEngine() {
     mkdir("./databases", 0777);
     dir = opendir(path);
   }
-  /** When you have completed all the code for
-   *  the test, run it using main.cpp and uncomment
-   *  this part of the code.
+  // * When you have completed all the code for
+  //  *  the test, run it using main.cpp and uncomment
+  //  *  this part of the code.
   struct dirent *stdir;
   while((stdir = readdir(dir)) != nullptr) {
     if( strcmp( stdir->d_name , "." ) == 0 ||
@@ -48,7 +48,7 @@ ExecuteEngine::ExecuteEngine() {
       continue;
     dbs_[stdir->d_name] = new DBStorageEngine(stdir->d_name, false);
   }
-   **/
+
   closedir(dir);
 }
 
@@ -605,7 +605,7 @@ dberr_t ExecuteEngine::ExecuteCreateIndex(pSyntaxNode ast, ExecuteContext *conte
     index_type = ast->child_->next_->next_->next_->val_;
 
   IndexInfo *index_info;
-  if (catelog->CreateIndex(table_name, index_name, index_keys, nullptr, index_info, index_type)  != DB_SUCCESS) {
+  if (catelog->CreateIndex(table_name, index_name, index_keys, nullptr, index_info, index_type) != DB_SUCCESS) {
     return DB_FAILED;
   }  
 
@@ -700,11 +700,6 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteExecfile" << std::endl;
 #endif
-  if (current_db_.empty()) {
-    cout << "No database selected" << endl;
-    return DB_FAILED;
-  }
-
   string file_name = ast->child_->val_;
   fstream file;
   file.open(file_name);
@@ -754,11 +749,6 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
     if (MinisqlParserGetError()) {
       // error
       printf("%s\n", MinisqlParserGetErrorMessage());
-    } else {
-      // Comment them out if you don't need to debug the syntax tree
-      // printf("[INFO] Sql syntax parse ok!\n");
-      // SyntaxTreePrinter printer(MinisqlGetParserRootNode());
-      // printer.PrintTree(syntax_tree_file_mgr[syntax_tree_id++]);
     }
 
     auto result = Execute(MinisqlGetParserRootNode());
@@ -792,6 +782,6 @@ dberr_t ExecuteEngine::ExecuteQuit(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteQuit" << std::endl;
 #endif
-  current_db_.clear();
+  current_db_ = "";
   return DB_QUIT;
 }

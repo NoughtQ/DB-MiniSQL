@@ -5,6 +5,9 @@
 #include "common/rowid.h"
 #include "concurrency/txn.h"
 #include "concurrency/txn_manager.h"
+#include <vector>
+#include <algorithm>
+#include <thread>
 
 void LockManager::SetTxnMgr(TxnManager *txn_mgr) { txn_mgr_ = txn_mgr; }
 
@@ -213,17 +216,82 @@ void LockManager::CheckAbort(Txn *txn, LockManager::LockRequestQueue &req_queue)
 /**
  * TODO: Student Implement
  */
-void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {}
+void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {
+    waits_for_[t1].insert(t2);
+    visited_set_.clear();
+    while (!visited_path_.empty())
+        visited_path_.pop();
+}
 
 /**
  * TODO: Student Implement
  */
-void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {}
+void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
+    waits_for_[t1].erase(t2);
+    visited_set_.clear();
+    while (!visited_path_.empty())
+        visited_path_.pop();
+}
 
 /**
  * TODO: Student Implement
  */
-bool LockManager::HasCycle(txn_id_t &newest_tid_in_cycle) {}
+bool LockManager::HasCycle(txn_id_t &newest_tid_in_cycle) {
+    auto& tid = newest_tid_in_cycle;                // avoid using lengthy name
+    bool flag = false;
+
+    // initial case
+    if (tid == INVALID_TXN_ID) {
+        for (const auto& pair : waits_for_) {
+            txn_id_t valid_tid = pair.first;
+            if (HasCycle(valid_tid)) {
+                tid = valid_tid;
+                return true;
+            }
+        }
+    }
+
+    // find the cycle!
+    if (visited_set_.count(tid)) {
+        // std::cout << "tid: " << tid << std::endl;
+        std::stack<txn_id_t> tmp_visited_set = visited_path_;
+        auto newest_tid = tid;
+        while (!tmp_visited_set.empty()) {
+            auto t = tmp_visited_set.top();
+            tmp_visited_set.pop();
+            if (t > newest_tid) newest_tid = t;
+            if (t == tid) break;
+        }
+        
+        tid = newest_tid;    // set the youngest tid
+        // visited_set_.clear();
+        // while (!visited_path_.empty())
+        //     visited_path_.pop();       
+        return true;
+    }
+
+    // tid is visited
+    visited_set_.insert(tid);
+    visited_path_.push(tid);
+
+    // dfs
+    if (waits_for_.count(tid)) {
+        for (const auto& next_tid : waits_for_[tid]) {
+            txn_id_t temp_tid = next_tid;  // Create a non-const copy
+            if (HasCycle(temp_tid)) {
+                tid = temp_tid;
+                visited_path_.pop();
+                visited_set_.erase(tid);
+                return true;
+            }
+        }
+    }
+
+    // backtrack
+    visited_path_.pop();
+    visited_set_.erase(tid);
+    return false;
+}
 
 void LockManager::DeleteNode(txn_id_t txn_id) {
     waits_for_.erase(txn_id);
@@ -250,12 +318,51 @@ void LockManager::DeleteNode(txn_id_t txn_id) {
 /**
  * TODO: Student Implement
  */
-void LockManager::RunCycleDetection() {}
+void LockManager::RunCycleDetection() {
+    while (enable_cycle_detection_) {
+        waits_for_.clear();
+
+        // create wait-for graph from lock table
+        for (const auto &kv : lock_table_) {
+            auto &req_list = kv.second.req_list_;
+            // tranverse the req_list in reverse order
+            for (auto ri = req_list.rbegin(); ri != req_list.rend(); ++ri) {
+                if (ri->granted_ == LockMode::kNone) 
+                    break;
+                for (auto rj = ri; rj != req_list.rend(); rj++) {
+                    if ((rj->granted_ == LockMode::kNone) &&
+                        ((ri->lock_mode_ == LockMode::kShared && rj->lock_mode_ == LockMode::kExclusive) || (ri->lock_mode_ == LockMode::kExclusive))) {
+                            AddEdge(rj->txn_id_, ri->txn_id_);
+                    }
+                }
+            }
+        }
+
+        // clear records of visited nodes
+        visited_set_.clear();
+        while (!visited_path_.empty()) visited_path_.pop();
+
+        // deadlock detection
+        txn_id_t newest_tid_in_cycle = INVALID_TXN_ID;
+        if (HasCycle(newest_tid_in_cycle)) {
+            txn_mgr_->Abort(txn_mgr_->GetTransaction(newest_tid_in_cycle));
+            DeleteNode(newest_tid_in_cycle);
+        }
+
+        // wait for some intervals
+        std::this_thread::sleep_for(cycle_detection_interval_);
+    }
+}
 
 /**
  * TODO: Student Implement
  */
 std::vector<std::pair<txn_id_t, txn_id_t>> LockManager::GetEdgeList() {
     std::vector<std::pair<txn_id_t, txn_id_t>> result;
+    for (const auto& elem : waits_for_) {
+        for (const auto& node : elem.second) {
+            result.push_back({elem.first, node});
+        }
+    }
     return result;
 }
