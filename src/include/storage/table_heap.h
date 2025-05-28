@@ -126,6 +126,8 @@ class TableHeap {
     // 初始化第一个表页面
     first_page->Init(new_page_id, INVALID_PAGE_ID, log_manager_, txn);
     first_page_id_ = new_page_id;
+    last_page_id_ = new_page_id;
+    free_space_.emplace(new_page_id, first_page->GetFreeSpaceRemaining());
 
     // 释放页面
     buffer_pool_manager_->UnpinPage(new_page_id, true);
@@ -137,11 +139,27 @@ class TableHeap {
         first_page_id_(first_page_id),
         schema_(schema),
         log_manager_(log_manager),
-        lock_manager_(lock_manager) {}
+        lock_manager_(lock_manager) {
+            // 读取整个表的所有页，计算 free_space_
+            // auto current_page_id = first_page_id_;
+            // page_id_t prev_page_id = INVALID_PAGE_ID;
+            // while (current_page_id!= INVALID_PAGE_ID) {
+            //     auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(current_page_id));
+            //     assert(false);
+            //     assert(page!= nullptr);
+            //     free_space_.emplace(current_page_id, page->GetFreeSpaceRemaining());
+            //     prev_page_id = current_page_id;
+            //     current_page_id = page->GetNextPageId();
+            //     buffer_pool_manager_->UnpinPage(prev_page_id, false);
+            // }
+            // last_page_id_ = prev_page_id;
+        };
 
  private:
   BufferPoolManager *buffer_pool_manager_;
   page_id_t first_page_id_;
+  page_id_t last_page_id_;
+  unordered_map<page_id_t, uint32_t> free_space_;
   Schema *schema_;
   [[maybe_unused]] LogManager *log_manager_;
   [[maybe_unused]] LockManager *lock_manager_;

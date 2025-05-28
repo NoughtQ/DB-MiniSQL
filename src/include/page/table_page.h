@@ -63,6 +63,10 @@ class TablePage : public Page {
 
   bool GetNextTupleRid(const RowId &cur_rid, RowId *next_rid);
 
+  uint32_t GetFreeSpaceRemaining() {
+    return GetFreeSpacePointer() - SIZE_TABLE_PAGE_HEADER - SIZE_TUPLE * GetTupleCount();
+  }
+
  private:
   uint32_t GetFreeSpacePointer() { return *reinterpret_cast<uint32_t *>(GetData() + OFFSET_FREE_SPACE); }
 
@@ -73,10 +77,6 @@ class TablePage : public Page {
   uint32_t GetTupleCount() { return *reinterpret_cast<uint32_t *>(GetData() + OFFSET_TUPLE_COUNT); }
 
   void SetTupleCount(uint32_t tuple_count) { memcpy(GetData() + OFFSET_TUPLE_COUNT, &tuple_count, sizeof(uint32_t)); }
-
-  uint32_t GetFreeSpaceRemaining() {
-    return GetFreeSpacePointer() - SIZE_TABLE_PAGE_HEADER - SIZE_TUPLE * GetTupleCount();
-  }
 
   uint32_t GetTupleOffsetAtSlot(uint32_t slot_num) {
     return *reinterpret_cast<uint32_t *>(GetData() + OFFSET_TUPLE_OFFSET + SIZE_TUPLE * slot_num);

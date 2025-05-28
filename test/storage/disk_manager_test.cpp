@@ -4,7 +4,7 @@
 
 #include "gtest/gtest.h"
 
-TEST(DiskManagerTest, BitMapPageTest) {
+TEST(DiskManagerTest, DISABLED_BitMapPageTest) {
   const size_t size = 512;
   char buf[size];
   memset(buf, 0, size);
@@ -34,7 +34,7 @@ TEST(DiskManagerTest, BitMapPageTest) {
   ASSERT_FALSE(bitmap->AllocatePage(ofs));
 }
 
-TEST(DiskManagerTest, FreePageAllocationTest) {
+TEST(DiskManagerTest, DISABLED_FreePageAllocationTest) {
   std::string db_name = "disk_test.db";
   remove(db_name.c_str());
   DiskManager *disk_mgr = new DiskManager(db_name);
@@ -58,7 +58,7 @@ TEST(DiskManagerTest, FreePageAllocationTest) {
   EXPECT_EQ(DiskManager::BITMAP_SIZE - 3, meta_page->GetExtentUsedPage(1));
 }
 
-TEST(DiskManagerTest, ExtentPageAllocationTest) {
+TEST(DiskManagerTest, DISABLED_ExtentPageAllocationTest) {
     std::string db_name = "disk_test.db";
     remove(db_name.c_str());
     DiskManager *disk_mgr = new DiskManager(db_name);

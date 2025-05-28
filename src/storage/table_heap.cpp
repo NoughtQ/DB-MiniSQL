@@ -11,59 +11,125 @@ bool TableHeap::InsertTuple(Row &row, Txn *txn) {
         LOG(ERROR) << "Failed to insert tuple: tuple is too large" << std::endl;
         return false;
     }
-    // 获取第一个页面
-    auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(first_page_id_));
-    // LOG(INFO) << "Insert: fetch first page: " << first_page_id_ << std::endl;
-    if (page == nullptr) {
-        LOG(ERROR) << "Failed to fetch page " << first_page_id_ << std::endl;
-        return false;
+    // 寻找合适的页面
+    uint32_t size = row.GetSerializedSize(schema_) + 8;
+    page_id_t page_id = INVALID_PAGE_ID;
+    auto it = free_space_.begin();
+    for (; it!= free_space_.end(); ++it) {
+        if (it->second >= size) {
+            page_id = it->first;
+            break;
+        }
     }
-
-    // 尝试在现有页面中插入
-    page->WLatch();
-    bool insert_success = page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
-    page->WUnlatch();
-
-    // 如果当前页面插入失败，尝试在后续页面中插入
-    while (!insert_success && page->GetNextPageId() != INVALID_PAGE_ID) {
-        page_id_t next_page_id = page->GetNextPageId();
-        buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
-        page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(next_page_id));
+    if (page_id != INVALID_PAGE_ID) {
+        // 在找到的页面中插入元组
+        auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(page_id));
         if (page == nullptr) {
-            LOG(ERROR) << "Failed to fetch page " << next_page_id << std::endl;
+            LOG(ERROR) << "Failed to fetch page when insert" << std::endl;
             return false;
         }
         page->WLatch();
-        insert_success = page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
+        // 插入并更新 free space
+        bool insert_success = page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
+        it->second = page->GetFreeSpaceRemaining();
         page->WUnlatch();
-    }
-
-    if (insert_success) {
         buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
+        if (!insert_success) {
+            assert(false);
+            LOG(ERROR) << "Unexpected error while insert" << std::endl;
+        }
+        return insert_success;
     } else {
         // 如果所有现有页面都已满，创建新页面
+        auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(last_page_id_));
+        if (page == nullptr) {
+            LOG(ERROR) << "Failed to fetch page when insert" << std::endl;
+            return false;
+        }
+        // 确保是最后一页
+        auto next_page_id = page->GetNextPageId();
+        if (next_page_id!= INVALID_PAGE_ID) {
+            buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+            LOG(ERROR) << "Unexpected error while insert" << std::endl;
+            return false;
+        }
+        // 创建新页面
         page_id_t new_page_id;
         auto new_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->NewPage(new_page_id));
         if (new_page == nullptr) {
-            buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
             LOG(ERROR) << "Failed to create new page while insert" << std::endl;
             return false;
         }
         new_page->Init(new_page_id, page->GetTablePageId(), log_manager_, txn);
+        new_page->SetNextPageId(INVALID_PAGE_ID);
         page->SetNextPageId(new_page_id);
         buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
 
         new_page->WLatch();
-        insert_success = new_page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
+        bool insert_success = new_page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
         new_page->WUnlatch();
         if (!insert_success) {
             LOG(ERROR) << "Unexpected error while insert" << std::endl;
         }
+        free_space_.emplace(new_page_id, new_page->GetFreeSpaceRemaining());
+        last_page_id_ = new_page_id;
 
         buffer_pool_manager_->UnpinPage(new_page_id, true);
+        return insert_success;
     }
+    // // 获取第一个页面
+    // auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(first_page_id_));
+    // // LOG(INFO) << "Insert: fetch first page: " << first_page_id_ << std::endl;
+    // if (page == nullptr) {
+    //     LOG(ERROR) << "Failed to fetch page " << first_page_id_ << std::endl;
+    //     return false;
+    // }
 
-    return insert_success;
+    // // 尝试在现有页面中插入
+    // page->WLatch();
+    // bool insert_success = page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
+    // page->WUnlatch();
+
+    // // 如果当前页面插入失败，尝试在后续页面中插入
+    // while (!insert_success && page->GetNextPageId() != INVALID_PAGE_ID) {
+    //     page_id_t next_page_id = page->GetNextPageId();
+    //     buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+    //     page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(next_page_id));
+    //     if (page == nullptr) {
+    //         LOG(ERROR) << "Failed to fetch page " << next_page_id << std::endl;
+    //         return false;
+    //     }
+    //     page->WLatch();
+    //     insert_success = page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
+    //     page->WUnlatch();
+    // }
+
+    // if (insert_success) {
+    //     buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
+    // } else {
+    //     // 如果所有现有页面都已满，创建新页面
+    //     page_id_t new_page_id;
+    //     auto new_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->NewPage(new_page_id));
+    //     if (new_page == nullptr) {
+    //         buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+    //         LOG(ERROR) << "Failed to create new page while insert" << std::endl;
+    //         return false;
+    //     }
+    //     new_page->Init(new_page_id, page->GetTablePageId(), log_manager_, txn);
+    //     page->SetNextPageId(new_page_id);
+    //     buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
+
+    //     new_page->WLatch();
+    //     insert_success = new_page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
+    //     new_page->WUnlatch();
+    //     if (!insert_success) {
+    //         LOG(ERROR) << "Unexpected error while insert" << std::endl;
+    //     }
+
+    //     buffer_pool_manager_->UnpinPage(new_page_id, true);
+    // }
+
+    // return insert_success;
 }
 
 bool TableHeap::MarkDelete(const RowId &rid, Txn *txn) {
@@ -142,9 +208,49 @@ void TableHeap::ApplyDelete(const RowId &rid, Txn *txn) {
     // Step2: Delete the tuple from the page.
     page->WLatch();
     page->ApplyDelete(rid, txn, log_manager_);
+    auto it = free_space_.find(rid.GetPageId());
+    if (it!= free_space_.end()) {
+        it->second = page->GetFreeSpaceRemaining();
+    } else {
+        LOG(ERROR) << "Unexpected error while ApplyDelete" << std::endl;
+    }
     page->WUnlatch();
+    // 当一个 table page 中所有元组都被删除了，需要删除这个 page。这里改了之后 iterator 里也要优化
+    RowId temp;
+    if (page->GetFirstTupleRid(&temp) == false) {
+        // 在双向链表中删除该页面
+        page_id_t next_page_id_ = page->GetNextPageId();
+        page_id_t prev_page_id_ = page->GetPrevPageId();
+        if (next_page_id_!= INVALID_PAGE_ID) {
+            auto next_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(next_page_id_));
+            next_page->WLatch();
+            next_page->SetPrevPageId(prev_page_id_);
+            next_page->WUnlatch();
+            buffer_pool_manager_->UnpinPage(next_page_id_, true);
+        }
+        if (prev_page_id_!= INVALID_PAGE_ID) {
+            auto prev_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(prev_page_id_));
+            prev_page->WLatch();
+            prev_page->SetNextPageId(next_page_id_);
+            prev_page->WUnlatch();
+            buffer_pool_manager_->UnpinPage(prev_page_id_, true);
+        }
+        if (page->GetTablePageId() == first_page_id_ && next_page_id_ != INVALID_PAGE_ID) {
+            first_page_id_ = next_page_id_;
+            buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+            buffer_pool_manager_->DeletePage(page->GetTablePageId());
+            free_space_.erase(page->GetTablePageId());
+        } else if (page->GetTablePageId() != first_page_id_) {
+            buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+            buffer_pool_manager_->DeletePage(page->GetTablePageId());
+            if (page->GetTablePageId() == last_page_id_) last_page_id_ = prev_page_id_;
+            free_space_.erase(page->GetTablePageId());
+        } else {
+            buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
+        }
+        return;
+    }
     buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
-  // TODO: 当一个 table page 中所有元组都被删除了，需要删除这个 page。这里改了之后 iterator 里也要优化
 }
 
 void TableHeap::RollbackDelete(const RowId &rid, Txn *txn) {
