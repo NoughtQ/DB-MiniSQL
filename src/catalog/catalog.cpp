@@ -371,6 +371,9 @@ dberr_t CatalogManager::DropIndex(const string &table_name, const string &index_
   // delete the entry from index_names_
   index_id_t index_id = index_names_[table_name][index_name];
   index_names_[table_name].erase(index_name);
+  
+  Index *index = indexes_[index_id]->GetIndex();
+  index->Destroy();
 
   // exception
   if (indexes_.count(index_id) == 0)
