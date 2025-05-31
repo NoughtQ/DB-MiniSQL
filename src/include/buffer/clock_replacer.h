@@ -2,11 +2,9 @@
 #define MINISQL_CLOCK_REPLACER_H
 
 #include <algorithm>
-#include <list>
-#include <map>
 #include <mutex>
-#include <queue>
 #include <unordered_set>
+#include <map>
 #include <vector>
 
 #include "buffer/replacer.h"
@@ -40,8 +38,9 @@ class CLOCKReplacer : public Replacer {
 
  private:
   size_t capacity;
-  list<frame_id_t> clock_list;               // replacer中可以被替换的数据页
-  map<frame_id_t, frame_id_t> clock_status;  // 数据页的存储状态
+  vector<pair<bool,bool>> clock_list_;    // <ref bit, invalid bit>
+  map<size_t, frame_id_t> clock_map_;
+  size_t clock_hand_;
 };
 
 #endif  // MINISQL_CLOCK_REPLACER_H
