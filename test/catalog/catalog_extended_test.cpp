@@ -12,11 +12,9 @@ static string db_file_name_extended = "catalog_extended_test.db";
 TEST(CatalogExtendedTest, DropTableAndIndexTest) {
   auto db = new DBStorageEngine(db_file_name_extended, true);
   auto &catalog = db->catalog_mgr_;
-  std::vector<Column *> columns = {
-    new Column("id", TypeId::kTypeInt, 0, false, false),
-    new Column("name", TypeId::kTypeChar, 64, 1, true, false),
-    new Column("score", TypeId::kTypeFloat, 2, true, false)
-  };
+  std::vector<Column *> columns = {new Column("id", TypeId::kTypeInt, 0, false, false),
+                                   new Column("name", TypeId::kTypeChar, 64, 1, true, false),
+                                   new Column("score", TypeId::kTypeFloat, 2, true, false)};
   auto schema = std::make_shared<Schema>(columns);
   Txn txn;
   TableInfo *table_info = nullptr;
@@ -53,10 +51,8 @@ TEST(CatalogExtendedTest, BatchRetrievalTest) {
   std::vector<std::string> table_names = {"table1", "table2", "table3"};
   std::vector<TableInfo *> created_tables;
   for (const auto &name : table_names) {
-    std::vector<Column *> columns = {
-      new Column("id", TypeId::kTypeInt, 0, false, false),
-      new Column("data", TypeId::kTypeChar, 32, 1, true, false)
-    };
+    std::vector<Column *> columns = {new Column("id", TypeId::kTypeInt, 0, false, false),
+                                     new Column("data", TypeId::kTypeChar, 32, 1, true, false)};
     auto schema = std::make_shared<Schema>(columns);
     TableInfo *table_info = nullptr;
     ASSERT_EQ(DB_SUCCESS, catalog->CreateTable(name, schema.get(), &txn, table_info));
@@ -86,10 +82,8 @@ TEST(CatalogExtendedTest, BatchRetrievalTest) {
 TEST(CatalogExtendedTest, GetTableByIdTest) {
   auto db = new DBStorageEngine(db_file_name_extended, true);
   auto &catalog = db->catalog_mgr_;
-  std::vector<Column *> columns = {
-    new Column("id", TypeId::kTypeInt, 0, false, false),
-    new Column("value", TypeId::kTypeFloat, 1, true, false)
-  };
+  std::vector<Column *> columns = {new Column("id", TypeId::kTypeInt, 0, false, false),
+                                   new Column("value", TypeId::kTypeFloat, 1, true, false)};
   auto schema = std::make_shared<Schema>(columns);
   Txn txn;
   TableInfo *table_info = nullptr;
@@ -126,9 +120,7 @@ TEST(CatalogExtendedTest, ErrorHandlingTest) {
   auto db = new DBStorageEngine(db_file_name_extended, true);
   auto &catalog = db->catalog_mgr_;
   Txn txn;
-  std::vector<Column *> columns = {
-    new Column("id", TypeId::kTypeInt, 0, false, false)
-  };
+  std::vector<Column *> columns = {new Column("id", TypeId::kTypeInt, 0, false, false)};
   auto schema = std::make_shared<Schema>(columns);
   TableInfo *table_info1 = nullptr;
   TableInfo *table_info2 = nullptr;
@@ -138,16 +130,20 @@ TEST(CatalogExtendedTest, ErrorHandlingTest) {
   // Try to create index on non-existent table
   IndexInfo *index_info = nullptr;
   std::vector<std::string> index_keys{"id"};
-  ASSERT_EQ(DB_TABLE_NOT_EXIST, catalog->CreateIndex("non_existent_table", "test_index", index_keys, &txn, index_info, "bptree"));
+  ASSERT_EQ(DB_TABLE_NOT_EXIST,
+            catalog->CreateIndex("non_existent_table", "test_index", index_keys, &txn, index_info, "bptree"));
   // Create duplicate index
   IndexInfo *index_info1 = nullptr;
   IndexInfo *index_info2 = nullptr;
-  ASSERT_EQ(DB_SUCCESS, catalog->CreateIndex("duplicate_table", "duplicate_index", index_keys, &txn, index_info1, "bptree"));
-  ASSERT_EQ(DB_INDEX_ALREADY_EXIST, catalog->CreateIndex("duplicate_table", "duplicate_index", index_keys, &txn, index_info2, "bptree"));
+  ASSERT_EQ(DB_SUCCESS,
+            catalog->CreateIndex("duplicate_table", "duplicate_index", index_keys, &txn, index_info1, "bptree"));
+  ASSERT_EQ(DB_INDEX_ALREADY_EXIST,
+            catalog->CreateIndex("duplicate_table", "duplicate_index", index_keys, &txn, index_info2, "bptree"));
   // Try to create index with non-existent column
   std::vector<std::string> bad_keys{"non_existent_column"};
   IndexInfo *bad_index = nullptr;
-  ASSERT_EQ(DB_COLUMN_NAME_NOT_EXIST, catalog->CreateIndex("duplicate_table", "bad_index", bad_keys, &txn, bad_index, "bptree"));
+  ASSERT_EQ(DB_COLUMN_NAME_NOT_EXIST,
+            catalog->CreateIndex("duplicate_table", "bad_index", bad_keys, &txn, bad_index, "bptree"));
   delete db;
 }
 
@@ -159,38 +155,38 @@ TEST(CatalogExtendedTest, ComplexScenarioAndPersistenceTest) {
     auto &catalog = db->catalog_mgr_;
     Txn txn;
     // Create students table
-    std::vector<Column *> student_columns = {
-      new Column("student_id", TypeId::kTypeInt, 0, false, false),
-      new Column("name", TypeId::kTypeChar, 64, 1, true, false),
-      new Column("age", TypeId::kTypeInt, 2, true, false),
-      new Column("gpa", TypeId::kTypeFloat, 3, true, false)
-    };
+    std::vector<Column *> student_columns = {new Column("student_id", TypeId::kTypeInt, 0, false, false),
+                                             new Column("name", TypeId::kTypeChar, 64, 1, true, false),
+                                             new Column("age", TypeId::kTypeInt, 2, true, false),
+                                             new Column("gpa", TypeId::kTypeFloat, 3, true, false)};
     auto student_schema = std::make_shared<Schema>(student_columns);
     TableInfo *student_table = nullptr;
     ASSERT_EQ(DB_SUCCESS, catalog->CreateTable("students", student_schema.get(), &txn, student_table));
     // Create courses table
-    std::vector<Column *> course_columns = {
-      new Column("course_id", TypeId::kTypeInt, 0, false, false),
-      new Column("course_name", TypeId::kTypeChar, 128, 1, true, false),
-      new Column("credits", TypeId::kTypeInt, 2, true, false)
-    };
+    std::vector<Column *> course_columns = {new Column("course_id", TypeId::kTypeInt, 0, false, false),
+                                            new Column("course_name", TypeId::kTypeChar, 128, 1, true, false),
+                                            new Column("credits", TypeId::kTypeInt, 2, true, false)};
     auto course_schema = std::make_shared<Schema>(course_columns);
     TableInfo *course_table = nullptr;
     ASSERT_EQ(DB_SUCCESS, catalog->CreateTable("courses", course_schema.get(), &txn, course_table));
     // Create indexes for students table
     IndexInfo *student_id_index = nullptr;
     std::vector<std::string> student_id_keys{"student_id"};
-    ASSERT_EQ(DB_SUCCESS, catalog->CreateIndex("students", "idx_student_id", student_id_keys, &txn, student_id_index, "bptree"));
+    ASSERT_EQ(DB_SUCCESS,
+              catalog->CreateIndex("students", "idx_student_id", student_id_keys, &txn, student_id_index, "bptree"));
     IndexInfo *student_name_index = nullptr;
     std::vector<std::string> student_name_keys{"name"};
-    ASSERT_EQ(DB_SUCCESS, catalog->CreateIndex("students", "idx_student_name", student_name_keys, &txn, student_name_index, "bptree"));
+    ASSERT_EQ(DB_SUCCESS, catalog->CreateIndex("students", "idx_student_name", student_name_keys, &txn,
+                                               student_name_index, "bptree"));
     IndexInfo *student_composite_index = nullptr;
     std::vector<std::string> student_composite_keys{"age", "gpa"};
-    ASSERT_EQ(DB_SUCCESS, catalog->CreateIndex("students", "idx_age_gpa", student_composite_keys, &txn, student_composite_index, "bptree"));
+    ASSERT_EQ(DB_SUCCESS, catalog->CreateIndex("students", "idx_age_gpa", student_composite_keys, &txn,
+                                               student_composite_index, "bptree"));
     // Create index for courses table
     IndexInfo *course_id_index = nullptr;
     std::vector<std::string> course_id_keys{"course_id"};
-    ASSERT_EQ(DB_SUCCESS, catalog->CreateIndex("courses", "idx_course_id", course_id_keys, &txn, course_id_index, "bptree"));
+    ASSERT_EQ(DB_SUCCESS,
+              catalog->CreateIndex("courses", "idx_course_id", course_id_keys, &txn, course_id_index, "bptree"));
     // Check all tables and indexes
     std::vector<TableInfo *> all_tables;
     ASSERT_EQ(DB_SUCCESS, catalog->GetTables(all_tables));

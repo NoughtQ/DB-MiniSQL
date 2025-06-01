@@ -95,8 +95,7 @@ Index *IndexInfo::CreateIndex(BufferPoolManager *buffer_pool_manager, const stri
   max_size += 4 + sizeof(unsigned char) * size_bitmap;
   for (auto col : key_schema_->GetColumns()) {
     // length of char column
-    if(col->GetType() == TypeId::kTypeChar)
-      max_size += 4;
+    if (col->GetType() == TypeId::kTypeChar) max_size += 4;
     max_size += col->GetLength();
   }
 

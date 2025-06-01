@@ -139,7 +139,7 @@ class TableHeap {
         first_page_id_(first_page_id),
         schema_(schema),
         log_manager_(log_manager),
-        lock_manager_(lock_manager) {
+        lock_manager_(lock_manager){
             // 读取整个表的所有页，计算 free_space_
             // auto current_page_id = first_page_id_;
             // page_id_t prev_page_id = INVALID_PAGE_ID;

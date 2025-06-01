@@ -152,7 +152,6 @@ bool BPlusTree::GetValue(const GenericKey *key, std::vector<RowId> &result, Txn 
   }
 
   return false;
-    
 }
 
 /*****************************************************************************
@@ -719,8 +718,7 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
 void BPlusTree::UpdateRootPageId() {
   Page *header_page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
   if (header_page == nullptr) {
-    LOG(ERROR) << "UpdateRootPageId: Failed to fetch INDEX_ROOTS_PAGE_ID for index_id: "
-               << index_id_
+    LOG(ERROR) << "UpdateRootPageId: Failed to fetch INDEX_ROOTS_PAGE_ID for index_id: " << index_id_
                << ". Root page ID update will not be persisted.";
     return;
   }
@@ -742,9 +740,9 @@ void BPlusTree::UpdateRootPageId() {
       if (header->Insert(index_id_, root_page_id_)) {
         modified_header = true;
       } else {
-        LOG(ERROR) << "UpdateRootPageId: For index_id: " << index_id_ 
-                   << ", root_page_id: " << root_page_id_
-                   << ", Update failed (entry not found) AND Insert also failed (likely duplicate or full). This is problematic.";
+        LOG(ERROR) << "UpdateRootPageId: For index_id: " << index_id_ << ", root_page_id: " << root_page_id_
+                   << ", Update failed (entry not found) AND Insert also failed (likely duplicate or full). This is "
+                      "problematic.";
       }
     }
   }

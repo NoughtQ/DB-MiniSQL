@@ -40,7 +40,7 @@ class BPlusTree {
 
   // return the value associated with a given key
   bool GetValue(const GenericKey *key, std::vector<RowId> &result, Txn *transaction = nullptr);
-  
+
   IndexIterator Begin();
 
   IndexIterator Begin(const GenericKey *key);
@@ -87,9 +87,9 @@ class BPlusTree {
   bool Coalesce(LeafPage *&neighbor_node, LeafPage *&node, InternalPage *&parent, int index,
                 Txn *transaction = nullptr);
 
-  void Redistribute(LeafPage *neighbor_node, LeafPage *node, int index, InternalPage* parent);
+  void Redistribute(LeafPage *neighbor_node, LeafPage *node, int index, InternalPage *parent);
 
-  void Redistribute(InternalPage *neighbor_node, InternalPage *node, int index, InternalPage* parent);
+  void Redistribute(InternalPage *neighbor_node, InternalPage *node, int index, InternalPage *parent);
 
   bool AdjustRoot(BPlusTreePage *node);
 

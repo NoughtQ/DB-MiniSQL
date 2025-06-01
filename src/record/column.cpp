@@ -36,8 +36,8 @@ Column::Column(const Column *other)
       unique_(other->unique_) {}
 
 /**
-* TODO: Student Implement
-*/
+ * TODO: Student Implement
+ */
 uint32_t Column::SerializeTo(char *buf) const {
   uint32_t offset = 0;
   // 写入魔数

@@ -94,9 +94,8 @@ class RecoveryManager {
  private:
   void UndoTxn(txn_id_t txn_id) {
     auto active_txn = active_txns_.find(txn_id);
-    if(active_txn == active_txns_.end()) return;
+    if (active_txn == active_txns_.end()) return;
     auto it = log_recs_.find(active_txn->second);
-
 
     while (it != log_recs_.end()) {
       const auto &rec = it->second;

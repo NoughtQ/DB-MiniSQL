@@ -63,7 +63,7 @@ void InternalPage::PairCopy(void *dest, void *src, int pair_num) {
  * LOOKUP
  *****************************************************************************/
 // auua:index begin from 0 这里返回的是第一个大于key的pair的前一组的page_id
- /*
+/*
  * Find and return the child pointer(page_id) which points to the child page
  * that contains input "key"
  * Start the search from the second key(the first key should always be invalid)
@@ -90,14 +90,14 @@ page_id_t InternalPage::Lookup(const GenericKey *key, const KeyManager &KM) {
   int right = size - 1;
   while (left <= right) {
     int mid = left + (right - left) / 2;
-    int cmp = KM.CompareKeys(KeyAt(mid),key);
+    int cmp = KM.CompareKeys(KeyAt(mid), key);
 
     if (cmp == 0) {
       return ValueAt(mid);  // Exact match found
     } else if (cmp > 0) {
       right = mid - 1;  // Search left half
     } else {
-      left = mid + 1;   // Search right half
+      left = mid + 1;  // Search right half
     }
   }
 
@@ -109,7 +109,7 @@ page_id_t InternalPage::Lookup(const GenericKey *key, const KeyManager &KM) {
  * INSERTION
  *****************************************************************************/
 // auua:貌似是已经创建好了节点，然后往里面填内容；又由于是新的根节点，那只会有两个元素
- /*
+/*
  * Populate new root page with old_value + new_key & new_value
  * When the insertion cause overflow from leaf page all the way upto the root
  * page, you should create a new root page and populate its elements.
@@ -151,12 +151,11 @@ int InternalPage::InsertNodeAfter(const page_id_t &old_value, GenericKey *new_ke
   return GetSize();
 }
 
-
 /*****************************************************************************
  * SPLIT
  *****************************************************************************/
 // auua: 移动后一半
- /*
+/*
  * Remove half of key & value pairs from this page to "recipient" page
  * buffer_pool_manager 是干嘛的？传给CopyNFrom()用于Fetch数据页
  */
@@ -174,18 +173,18 @@ void InternalPage::MoveHalfTo(InternalPage *recipient, BufferPoolManager *buffer
   SetSize(split_index);
 }
 
-//auua:和leaf一样，也是直接放到了最后，后面有问题再改吧（
-/* 
+// auua:和leaf一样，也是直接放到了最后，后面有问题再改吧（
+/*
  * Copy entries into me, starting from {items} and copy {size} entries.
  * Since it is an internal page, for all entries (pages) moved, their parents page now changes
  * to me.
- * So I need to 'adopt' them by changing their parent page id, which needs to be persisted with 
+ * So I need to 'adopt' them by changing their parent page id, which needs to be persisted with
  * BufferPoolManger
  */
 void InternalPage::CopyNFrom(void *src, int size, BufferPoolManager *buffer_pool_manager) {
   if (size <= 0) return;
   ASSERT(GetSize() + size <= GetMaxSize(), "Exceeds page capacity");
-  
+
   int dest_index = GetSize();
   memcpy(PairPtrAt(dest_index), src, size * pair_size);
 
@@ -197,7 +196,7 @@ void InternalPage::CopyNFrom(void *src, int size, BufferPoolManager *buffer_pool
     if (child_page != nullptr) {
       auto *child_node = reinterpret_cast<BPlusTreePage *>(child_page->GetData());
       child_node->SetParentPageId(GetPageId());
-      //unpin
+      // unpin
       buffer_pool_manager->UnpinPage(child_page_id, true);
     }
   }
@@ -214,9 +213,8 @@ void InternalPage::CopyNFrom(void *src, int size, BufferPoolManager *buffer_pool
  * NOTE: store key&value pair continuously after deletion
  */
 void InternalPage::Remove(int index) {
-  //if not the last one
-  if(index < GetSize()-1)
-    memmove(PairPtrAt(index), PairPtrAt(index+1), (GetSize()-index-1)*pair_size);
+  // if not the last one
+  if (index < GetSize() - 1) memmove(PairPtrAt(index), PairPtrAt(index + 1), (GetSize() - index - 1) * pair_size);
   IncreaseSize(-1);
 }
 
@@ -224,7 +222,7 @@ void InternalPage::Remove(int index) {
  * Remove the only key & value pair in internal page and return the value
  * NOTE: only call this method within AdjustRoot()(in b_plus_tree.cpp)
  */
-page_id_t InternalPage::RemoveAndReturnOnlyChild() { 
+page_id_t InternalPage::RemoveAndReturnOnlyChild() {
   IncreaseSize(-1);
   return ValueAt(0);
 }
@@ -233,7 +231,7 @@ page_id_t InternalPage::RemoveAndReturnOnlyChild() {
  * MERGE
  *****************************************************************************/
 // auua: 内部节点合并也是右边的并到左边的尾部
- /*
+/*
  * Remove all of key & value pairs from this page to "recipient" page.
  * The middle_key is the separation key you should get from the parent. You need
  * to make sure the middle key is added to the recipient to maintain the invariant.
@@ -241,27 +239,26 @@ page_id_t InternalPage::RemoveAndReturnOnlyChild() {
  * pages that are moved to the recipient
  */
 void InternalPage::MoveAllTo(InternalPage *recipient, GenericKey *middle_key, BufferPoolManager *buffer_pool_manager) {
-  if(GetSize()<=0) return;
+  if (GetSize() <= 0) return;
 
   // copy
   int move_num = GetSize();
   int dest_index = recipient->GetSize();
-  memcpy(recipient->PairPtrAt(dest_index), PairPtrAt(0), move_num*pair_size);
+  memcpy(recipient->PairPtrAt(dest_index), PairPtrAt(0), move_num * pair_size);
   recipient->SetKeyAt(dest_index, middle_key);
   recipient->IncreaseSize(move_num);
 
   // change parent id
   page_id_t parent_id = recipient->GetPageId();
-  for(int i=0; i<move_num; i++)
-  {
+  for (int i = 0; i < move_num; i++) {
     page_id_t child_page_id = ValueAt(i);
     auto *child_page = buffer_pool_manager->FetchPage(child_page_id);
 
     if (child_page != nullptr) {
       auto *child_node = reinterpret_cast<BPlusTreePage *>(child_page->GetData());
       child_node->SetParentPageId(parent_id);
-      
-      //unpin
+
+      // unpin
       buffer_pool_manager->UnpinPage(child_page_id, true);
     }
   }
@@ -283,7 +280,7 @@ void InternalPage::MoveAllTo(InternalPage *recipient, GenericKey *middle_key, Bu
 void InternalPage::MoveFirstToEndOf(InternalPage *recipient, GenericKey *middle_key,
                                     BufferPoolManager *buffer_pool_manager) {
   int current_size = GetSize();
-  if(current_size<=0) return;
+  if (current_size <= 0) return;
 
   recipient->CopyLastFrom(middle_key, ValueAt(0), buffer_pool_manager);
 
@@ -305,8 +302,7 @@ void InternalPage::CopyLastFrom(GenericKey *key, const page_id_t value, BufferPo
   SetValueAt(dest_index, value);
 
   auto *child_page = buffer_pool_manager->FetchPage(value);
-  if(child_page!=nullptr)
-  {
+  if (child_page != nullptr) {
     auto *child_node = reinterpret_cast<BPlusTreePage *>(child_page->GetData());
     child_node->SetParentPageId(GetPageId());
     buffer_pool_manager->UnpinPage(value, true);
@@ -324,32 +320,32 @@ void InternalPage::CopyLastFrom(GenericKey *key, const page_id_t value, BufferPo
  */
 void InternalPage::MoveLastToFrontOf(InternalPage *recipient, GenericKey *middle_key,
                                      BufferPoolManager *buffer_pool_manager) {
-  if(GetSize()<=0) return;
+  if (GetSize() <= 0) return;
 
-  recipient->CopyFirstFrom(middle_key, ValueAt(GetSize()-1), buffer_pool_manager);
-  
+  recipient->CopyFirstFrom(middle_key, ValueAt(GetSize() - 1), buffer_pool_manager);
+
   // auua：上层调用时认为整个键值对都传过去了...导致了bug...
-  recipient->SetKeyAt(0,KeyAt(GetSize()-1));
+  recipient->SetKeyAt(0, KeyAt(GetSize() - 1));
 
   IncreaseSize(-1);
 }
 
-//auua:iii 这里我增加了一个key的接口，这样更对称...
+// auua:iii 这里我增加了一个key的接口，这样更对称...
 /* Append an entry at the beginning.
  * Since it is an internal page, the moved entry(page)'s parent needs to be updated.
  * So I need to 'adopt' it by changing its parent page id, which needs to be persisted with BufferPoolManger
  */
-void InternalPage::CopyFirstFrom(GenericKey *middle_key, const page_id_t value, BufferPoolManager *buffer_pool_manager) {
-  memmove(PairPtrAt(1), PairPtrAt(0), GetSize()*pair_size);
+void InternalPage::CopyFirstFrom(GenericKey *middle_key, const page_id_t value,
+                                 BufferPoolManager *buffer_pool_manager) {
+  memmove(PairPtrAt(1), PairPtrAt(0), GetSize() * pair_size);
   SetValueAt(0, value);
   SetKeyAt(1, middle_key);
 
   auto *child_page = buffer_pool_manager->FetchPage(value);
-  if(child_page != nullptr)
-  {
+  if (child_page != nullptr) {
     auto *child_node = reinterpret_cast<BPlusTreePage *>(child_page->GetData());
     child_node->SetParentPageId(GetPageId());
-    buffer_pool_manager->UnpinPage(value,true);
+    buffer_pool_manager->UnpinPage(value, true);
   }
 
   IncreaseSize(1);

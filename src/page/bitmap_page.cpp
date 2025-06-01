@@ -16,25 +16,25 @@ bool BitmapPage<PageSize>::AllocatePage(uint32_t &page_offset) {
     LOG(ERROR) << "No more space in the bitmap page";
     return false;
   }
-  page_offset = next_free_page_; // 分配下一个可用的页面
+  page_offset = next_free_page_;  // 分配下一个可用的页面
 
   /* 更新位图 */
   uint32_t byte_index = page_offset / 8;
   uint8_t bit_index = page_offset % 8;
   bytes[byte_index] |= (1 << bit_index);
-  page_allocated_++; // 增加已分配的页面数
+  page_allocated_++;  // 增加已分配的页面数
 
   /* 更新下一个可用的页面 */
   uint32_t start = next_free_page_;
   next_free_page_ = (next_free_page_ + 1) % GetMaxSupportedSize();  // 循环使用位图 (circular bitmap)
-  while(next_free_page_ != start){
-    if(IsPageFree(next_free_page_)){
+  while (next_free_page_ != start) {
+    if (IsPageFree(next_free_page_)) {
       break;
     }
     next_free_page_ = (next_free_page_ + 1) % GetMaxSupportedSize();  // 循环使用位图 (circular bitmap)
   }
-  if(next_free_page_ == start){
-    next_free_page_ = INVALID_PAGE; // 没有可用的页面
+  if (next_free_page_ == start) {
+    next_free_page_ = INVALID_PAGE;  // 没有可用的页面
   }
   return true;
 }
@@ -59,10 +59,10 @@ bool BitmapPage<PageSize>::DeAllocatePage(uint32_t page_offset) {
   uint32_t byte_index = page_offset / 8;
   uint8_t bit_index = page_offset % 8;
   bytes[byte_index] &= ~(1 << bit_index);
-  page_allocated_--; // 减少已分配的页面数
+  page_allocated_--;  // 减少已分配的页面数
 
   /* 更新下一个可用的页面 */
-  if(next_free_page_ == INVALID_PAGE){
+  if (next_free_page_ == INVALID_PAGE) {
     next_free_page_ = page_offset;
   }
   return true;
@@ -75,7 +75,7 @@ template <size_t PageSize>
 bool BitmapPage<PageSize>::IsPageFree(uint32_t page_offset) const {
   uint32_t byte_index = page_offset / 8;
   uint8_t bit_index = page_offset % 8;
-  return !(bytes[byte_index] & (1 << bit_index)); // 检查对应位是否为1，为1则表示页面已被分配，为0则表示页面未被分配
+  return !(bytes[byte_index] & (1 << bit_index));  // 检查对应位是否为1，为1则表示页面已被分配，为0则表示页面未被分配
 }
 
 template <size_t PageSize>

@@ -16,19 +16,18 @@
 #include "executor/executors/update_executor.h"
 #include "executor/executors/values_executor.h"
 #include "glog/logging.h"
-#include "planner/planner.h"
 #include "parser/minisql_yacc.h"
 #include "parser/syntax_tree_printer.h"
-#include "utils/utils.h"
+#include "planner/planner.h"
 #include "utils/tree_file_mgr.h"
+#include "utils/utils.h"
 
 extern "C" {
-  int yyparse(void);
-  extern FILE *yyin;
-  #include "parser/minisql_lex.h"
-  #include "parser/parser.h"
-  }
-
+int yyparse(void);
+extern FILE *yyin;
+#include "parser/minisql_lex.h"
+#include "parser/parser.h"
+}
 
 ExecuteEngine::ExecuteEngine() {
   char path[] = "./databases";
@@ -41,11 +40,8 @@ ExecuteEngine::ExecuteEngine() {
   //  *  the test, run it using main.cpp and uncomment
   //  *  this part of the code.
   struct dirent *stdir;
-  while((stdir = readdir(dir)) != nullptr) {
-    if( strcmp( stdir->d_name , "." ) == 0 ||
-        strcmp( stdir->d_name , "..") == 0 ||
-        stdir->d_name[0] == '.')
-      continue;
+  while ((stdir = readdir(dir)) != nullptr) {
+    if (strcmp(stdir->d_name, ".") == 0 || strcmp(stdir->d_name, "..") == 0 || stdir->d_name[0] == '.') continue;
     dbs_[stdir->d_name] = new DBStorageEngine(stdir->d_name, false);
   }
 
@@ -213,8 +209,7 @@ dberr_t ExecuteEngine::Execute(pSyntaxNode ast) {
   }
   std::cout << writer.stream_.rdbuf();
   // todo:: use shared_ptr for schema
-  if (ast->type_ == kNodeSelect)
-      delete planner.plan_->OutputSchema();
+  if (ast->type_ == kNodeSelect) delete planner.plan_->OutputSchema();
   return DB_SUCCESS;
 }
 
@@ -275,8 +270,7 @@ dberr_t ExecuteEngine::ExecuteDropDatabase(pSyntaxNode ast, ExecuteContext *cont
   delete dbs_[db_name];
   remove(("./databases/" + db_name).c_str());
   dbs_.erase(db_name);
-  if (db_name == current_db_)
-    current_db_ = "";
+  if (db_name == current_db_) current_db_ = "";
   return DB_SUCCESS;
 }
 
@@ -371,16 +365,16 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
   auto node = ast->child_->next_->child_;
   int table_idx = 0;
   int char_len;
-  
+
   // check if there is a primary key constraint
   while (node) {
     if (node->type_ == kNodeColumnList) {
       if (string(node->val_) == "primary keys") {
-          auto cur = node->child_;
-          while (cur) {
-            primary_keys.insert(cur->val_);
-            cur = cur->next_;
-          }
+        auto cur = node->child_;
+        while (cur) {
+          primary_keys.insert(cur->val_);
+          cur = cur->next_;
+        }
       }
       break;
     }
@@ -405,24 +399,22 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
       if (string(node->val_) == "unique") {
         is_unique = true;
       }
-      if (string(node->val_) == "is null")
-        is_null = true;
+      if (string(node->val_) == "is null") is_null = true;
     } else if (primary_keys.count(column_name) != 0) {
       is_unique = true;
       is_null = true;
     }
 
     // column types
-    auto type = kTypeInvalid;  
+    auto type = kTypeInvalid;
     if (column_type == "int")
       type = kTypeInt;
     else if (column_type == "char") {
       type = kTypeChar;
       char_len = atoi(node->child_->next_->child_->val_);
-    }
-    else if (column_type == "float")
+    } else if (column_type == "float")
       type = kTypeFloat;
-    
+
     // create a new column
     if (type != kTypeChar) {
       column = new Column(column_name, type, table_idx, is_null, is_unique);
@@ -455,7 +447,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
   }
 
   // create unique indexes for columns
-  for (const auto& col : columns) {
+  for (const auto &col : columns) {
     if (col->IsUnique() && primary_keys.count(col->GetName()) == 0) {
       vector<string> uq_col_name = {col->GetName()};
       auto uq_index_name = "uk_" + table_name + "_" + col->GetName();
@@ -466,7 +458,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
       }
     }
   }
-  
+
   return DB_SUCCESS;
 }
 
@@ -521,7 +513,7 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
     return DB_FAILED;
   }
 
-  vector<string> table_names;  
+  vector<string> table_names;
   vector<TableInfo *> tables;
   vector<IndexInfo *> indexes;
   map<string, vector<IndexInfo *>> table_name2indexes;
@@ -533,20 +525,16 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
     return DB_FAILED;
   }
 
-  for (const auto &table : tables)
-    table_names.push_back(table->GetTableName());
+  for (const auto &table : tables) table_names.push_back(table->GetTableName());
   bool has_index = false;
   for (const auto &table_name : table_names) {
     if (dbs_[current_db_]->catalog_mgr_->GetTableIndexes(table_name, indexes) == DB_SUCCESS) {
-      if (indexes.size() > 0)
-        has_index = true;
+      if (indexes.size() > 0) has_index = true;
       table_name2indexes[table_name] = indexes;
     }
-    if (string("Index in " + table_name).length() > max_width) 
-        max_width = string("Index in " + table_name).length();
+    if (string("Index in " + table_name).length() > max_width) max_width = string("Index in " + table_name).length();
     for (const auto &index : indexes) {
-      if (index->GetIndexName().length() > max_width) 
-        max_width = index->GetIndexName().length();
+      if (index->GetIndexName().length() > max_width) max_width = index->GetIndexName().length();
     }
   }
   // no index found
@@ -564,12 +552,12 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
   for (const auto &t2i : table_name2indexes) {
     cout << "| " << std::left << setfill(' ') << setw(max_width) << "Index in " + t2i.first << " |" << endl;
     cout << "+" << setfill('-') << setw(max_width + 2) << ""
-    << "+" << endl;
+         << "+" << endl;
     for (const auto &index : t2i.second) {
       cout << "| " << std::left << setfill(' ') << setw(max_width) << index->GetIndexName() << " |" << endl;
     }
     cout << "+" << setfill('-') << setw(max_width + 2) << ""
-    << "+" << endl;
+         << "+" << endl;
   }
 
   return DB_SUCCESS;
@@ -601,13 +589,12 @@ dberr_t ExecuteEngine::ExecuteCreateIndex(pSyntaxNode ast, ExecuteContext *conte
   }
 
   string index_type = "";
-  if (ast->child_->next_->next_->next_)
-    index_type = ast->child_->next_->next_->next_->val_;
+  if (ast->child_->next_->next_->next_) index_type = ast->child_->next_->next_->next_->val_;
 
   IndexInfo *index_info;
   if (catelog->CreateIndex(table_name, index_name, index_keys, nullptr, index_info, index_type) != DB_SUCCESS) {
     return DB_FAILED;
-  }  
+  }
 
   return DB_SUCCESS;
 }
@@ -632,10 +619,8 @@ dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context
   vector<IndexInfo *> indexes;
   vector<string> table_names;
 
-  if (dbs_[current_db_]->catalog_mgr_->GetTables(tables) == DB_FAILED)
-    return DB_FAILED;
-  for (const auto &table : tables)
-    table_names.push_back(table->GetTableName());
+  if (dbs_[current_db_]->catalog_mgr_->GetTables(tables) == DB_FAILED) return DB_FAILED;
+  for (const auto &table : tables) table_names.push_back(table->GetTableName());
 
   for (const auto &tn : table_names) {
     // find the corresponding table name of the index
@@ -646,7 +631,7 @@ dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context
           break;
         }
       }
-    } 
+    }
   }
 
   if (catelog->DropIndex(table_name, index_name) != DB_SUCCESS) {
@@ -720,14 +705,12 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
   auto start_time = chrono::system_clock::now();
   while (!file.eof()) {
     i = 0;
-    while (!file.eof() && (ch = file.get()) != ';')
-      sql[i++] = ch;
-      
-    if (file.eof())
-      continue;
-  
-    sql[i++] = ch;     // ;
-    sql[i] = '\0';     // don't forget it!
+    while (!file.eof() && (ch = file.get()) != ';') sql[i++] = ch;
+
+    if (file.eof()) continue;
+
+    sql[i++] = ch;  // ;
+    sql[i] = '\0';  // don't forget it!
 
     cout << sql << endl;
     // create buffer for sql input
@@ -766,8 +749,7 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
   }
   // end timing
   auto stop_time = chrono::system_clock::now();
-  double duration_time =
-      double((chrono::duration_cast<chrono::milliseconds>(stop_time - start_time)).count());
+  double duration_time = double((chrono::duration_cast<chrono::milliseconds>(stop_time - start_time)).count());
   cout << "Execfile finished in " << duration_time << " ms" << endl;
   file.close();
 

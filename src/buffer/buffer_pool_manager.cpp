@@ -36,7 +36,7 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
   auto it = page_table_.find(page_id);
   if (it != page_table_.end()) {
     // 1.1
-    Page *page = &pages_[it->second]; // pages_[frame_id]
+    Page *page = &pages_[it->second];  // pages_[frame_id]
     if (page->pin_count_ == 0) {
       replacer_->Pin(it->second);
     }
@@ -45,17 +45,17 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
   } else {
     // 1.2
     frame_id_t frame_id;
-    if (!free_list_.empty()) { // 内存池未满
+    if (!free_list_.empty()) {  // 内存池未满
       // 1.2.1
       frame_id = free_list_.front();
       free_list_.pop_front();
-    } else { // 使用 lruReplace
+    } else {  // 使用 lruReplace
       // 1.2.2
       if (!replacer_->Victim(&frame_id)) {
         return nullptr;
       }
     }
-    Page *page = &pages_[frame_id]; // 老的 page
+    Page *page = &pages_[frame_id];  // 老的 page
     // 2
     if (page->is_dirty_) {
       FlushPage(page->page_id_);
@@ -83,23 +83,23 @@ Page *BufferPoolManager::NewPage(page_id_t &page_id) {
   // 4.   Set the page ID output parameter. Return a pointer to P.
   frame_id_t frame_id;
   Page *page;
-  if(free_list_.empty()) { // 内存池已满
-    if(!replacer_->Victim(&frame_id)) {
+  if (free_list_.empty()) {  // 内存池已满
+    if (!replacer_->Victim(&frame_id)) {
       page_id = INVALID_PAGE_ID;
       return nullptr;
     }
     // else the victim page is found
     page = &pages_[frame_id];
-    if(page->is_dirty_) { // 有可能是脏页
+    if (page->is_dirty_) {  // 有可能是脏页
       FlushPage(page->page_id_);
     }
-    page_table_.erase(page->page_id_); // 善后
-  } else {  // 内存还空着
+    page_table_.erase(page->page_id_);  // 善后
+  } else {                              // 内存还空着
     frame_id = free_list_.front();
     free_list_.pop_front();
     page = &pages_[frame_id];
   }
-  page_id = AllocatePage(); // 分配新的 page_id
+  page_id = AllocatePage();  // 分配新的 page_id
   page_table_.insert({page_id, frame_id});
   page->ResetMemory();
   page->page_id_ = page_id;
@@ -118,17 +118,17 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) {
   // 2.   If P exists, but has a non-zero pin-count, return false. Someone is using the page.
   // 3.   Otherwise, P can be deleted. Remove P from the page table, reset its metadata and return it to the free list.
   auto it = page_table_.find(page_id);
-  if(it == page_table_.end()) {
+  if (it == page_table_.end()) {
     DeallocatePage(page_id);  // 说明已经被替换掉，那就直接删除
     return true;
   }
   frame_id_t frame_id = it->second;
   Page *page = &pages_[frame_id];
-  if(page->pin_count_ != 0) {
+  if (page->pin_count_ != 0) {
     LOG(ERROR) << "Unable to delete page " << page_id << ": pin count = " << page->pin_count_ << endl;
     return false;
   }
-  replacer_->Pin(frame_id);  // 需要将其从 replacer 中删除
+  replacer_->Pin(frame_id);    // 需要将其从 replacer 中删除
   page_table_.erase(page_id);  // 删除元信息
   page->page_id_ = INVALID_PAGE_ID;
   page->is_dirty_ = false;
@@ -142,42 +142,42 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) {
  * TODO: Student Implement
  */
 bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
-    auto it = page_table_.find(page_id);
-    if(it == page_table_.end()) {
-        LOG(ERROR) << "Page not in buffer pool: " << page_id << endl;
-        return false;
-    }
-    frame_id_t frame_id = it->second;
-    Page *page = &pages_[frame_id];
-    // LOG(INFO) << "Unpin page: " << page_id << ", pin count: " << page->pin_count_ << endl;
-    if(page->pin_count_ == 0) {
-        LOG(ERROR) << "Unable to unpin page " << page_id << ": pin count = " << page->pin_count_ << endl;
-        return false;
-    }
-    page->pin_count_--;
-    if(page->pin_count_ == 0) {
-        replacer_->Unpin(frame_id);
-    }
-    page->is_dirty_ |= is_dirty;
-    return true;
+  auto it = page_table_.find(page_id);
+  if (it == page_table_.end()) {
+    LOG(ERROR) << "Page not in buffer pool: " << page_id << endl;
+    return false;
+  }
+  frame_id_t frame_id = it->second;
+  Page *page = &pages_[frame_id];
+  // LOG(INFO) << "Unpin page: " << page_id << ", pin count: " << page->pin_count_ << endl;
+  if (page->pin_count_ == 0) {
+    LOG(ERROR) << "Unable to unpin page " << page_id << ": pin count = " << page->pin_count_ << endl;
+    return false;
+  }
+  page->pin_count_--;
+  if (page->pin_count_ == 0) {
+    replacer_->Unpin(frame_id);
+  }
+  page->is_dirty_ |= is_dirty;
+  return true;
 }
 
 /**
  * TODO: Student Implement
  */
 bool BufferPoolManager::FlushPage(page_id_t page_id) {
-    auto it = page_table_.find(page_id);
-    if(it == page_table_.end()) {
-        // LOG(ERROR) << "Cannot flush page " << page_id << ": not found" << endl;
-        return false;
-    }
-    frame_id_t frame_id = it->second;
-    Page *page = &pages_[frame_id];
-    if(page->is_dirty_) {
-        disk_manager_->WritePage(page_id, page->data_);
-        page->is_dirty_ = false;
-    }
-    return true;
+  auto it = page_table_.find(page_id);
+  if (it == page_table_.end()) {
+    // LOG(ERROR) << "Cannot flush page " << page_id << ": not found" << endl;
+    return false;
+  }
+  frame_id_t frame_id = it->second;
+  Page *page = &pages_[frame_id];
+  if (page->is_dirty_) {
+    disk_manager_->WritePage(page_id, page->data_);
+    page->is_dirty_ = false;
+  }
+  return true;
 }
 
 page_id_t BufferPoolManager::AllocatePage() {
@@ -189,9 +189,7 @@ void BufferPoolManager::DeallocatePage(__attribute__((unused)) page_id_t page_id
   disk_manager_->DeAllocatePage(page_id);
 }
 
-bool BufferPoolManager::IsPageFree(page_id_t page_id) {
-  return disk_manager_->IsPageFree(page_id);
-}
+bool BufferPoolManager::IsPageFree(page_id_t page_id) { return disk_manager_->IsPageFree(page_id); }
 
 // Only used for debug
 bool BufferPoolManager::CheckAllUnpinned() {

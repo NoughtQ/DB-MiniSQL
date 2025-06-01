@@ -63,24 +63,24 @@ page_id_t DiskManager::AllocatePage() {
     // 开辟新的 extent
     num_extents++;
   }
-  if (num_extents > (PAGE_SIZE - 8) / 4){
+  if (num_extents > (PAGE_SIZE - 8) / 4) {
     LOG(ERROR) << "No more space for new page.";
     return INVALID_PAGE_ID;
   }
   /* 在新 extent 中分配页 */
-  char bitmap_page_data[PAGE_SIZE] = {0}; // 存储位图的内存
+  char bitmap_page_data[PAGE_SIZE] = {0};  // 存储位图的内存
   BitmapPage<PAGE_SIZE> *bitmap_page = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(bitmap_page_data);
-  ReadPhysicalPage((num_extents - 1) * (BITMAP_SIZE + 1) + 1, bitmap_page_data); // 读取位图页
+  ReadPhysicalPage((num_extents - 1) * (BITMAP_SIZE + 1) + 1, bitmap_page_data);  // 读取位图页
 
-  uint32_t page_offset; // 分区中的页偏移
-  bool success = bitmap_page->AllocatePage(page_offset); // 分配页
+  uint32_t page_offset;                                   // 分区中的页偏移
+  bool success = bitmap_page->AllocatePage(page_offset);  // 分配页
   ASSERT(success, "Failed to allocate page.");
-  WritePhysicalPage((num_extents - 1) * (BITMAP_SIZE + 1) + 1, bitmap_page_data); // 写入位图页
-  
+  WritePhysicalPage((num_extents - 1) * (BITMAP_SIZE + 1) + 1, bitmap_page_data);  // 写入位图页
+
   // 更新元数据
   meta_page->num_allocated_pages_++;
   meta_page->extent_used_page_[num_extents - 1]++;
-  
+
   return (num_extents - 1) * BITMAP_SIZE + page_offset;
 }
 
@@ -89,16 +89,16 @@ page_id_t DiskManager::AllocatePage() {
  */
 void DiskManager::DeAllocatePage(page_id_t logical_page_id) {
   DiskFileMetaPage *meta_page = reinterpret_cast<DiskFileMetaPage *>(meta_data_);
-  page_id_t bitmap_id = logical_page_id / BITMAP_SIZE * (BITMAP_SIZE + 1) + 1; // 位图页的物理页号
-  char bitmap_page_data[PAGE_SIZE] = {0}; // 存储位图的内存
+  page_id_t bitmap_id = logical_page_id / BITMAP_SIZE * (BITMAP_SIZE + 1) + 1;  // 位图页的物理页号
+  char bitmap_page_data[PAGE_SIZE] = {0};                                       // 存储位图的内存
   BitmapPage<PAGE_SIZE> *bitmap_page = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(bitmap_page_data);
-  ReadPhysicalPage(bitmap_id, bitmap_page_data); // 读取位图页
+  ReadPhysicalPage(bitmap_id, bitmap_page_data);  // 读取位图页
 
-  uint32_t page_offset = logical_page_id % BITMAP_SIZE; // 分区中的页偏移
-  bool success = bitmap_page->DeAllocatePage(page_offset); // 释放页
+  uint32_t page_offset = logical_page_id % BITMAP_SIZE;     // 分区中的页偏移
+  bool success = bitmap_page->DeAllocatePage(page_offset);  // 释放页
   ASSERT(success, "Failed to deallocate page.");
-  WritePhysicalPage(bitmap_id, bitmap_page_data); // 写入位图页
-  
+  WritePhysicalPage(bitmap_id, bitmap_page_data);  // 写入位图页
+
   // 更新元数据
   meta_page->num_allocated_pages_--;
   meta_page->extent_used_page_[logical_page_id / BITMAP_SIZE]--;
@@ -108,22 +108,22 @@ void DiskManager::DeAllocatePage(page_id_t logical_page_id) {
  * TODO: Student Implement
  */
 bool DiskManager::IsPageFree(page_id_t logical_page_id) {
-  page_id_t bitmap_id = logical_page_id / BITMAP_SIZE * (BITMAP_SIZE + 1) + 1; // 位图页的物理页号
-  char bitmap_page_data[PAGE_SIZE] = {0}; // 存储位图的内存
+  page_id_t bitmap_id = logical_page_id / BITMAP_SIZE * (BITMAP_SIZE + 1) + 1;  // 位图页的物理页号
+  char bitmap_page_data[PAGE_SIZE] = {0};                                       // 存储位图的内存
   BitmapPage<PAGE_SIZE> *bitmap_page = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(bitmap_page_data);
-  ReadPhysicalPage(bitmap_id, bitmap_page_data); // 读取位图页
+  ReadPhysicalPage(bitmap_id, bitmap_page_data);  // 读取位图页
 
-  uint32_t page_offset = logical_page_id % BITMAP_SIZE; // 分区中的页偏移
-  return bitmap_page->IsPageFree(page_offset); // 检查页是否空闲
+  uint32_t page_offset = logical_page_id % BITMAP_SIZE;  // 分区中的页偏移
+  return bitmap_page->IsPageFree(page_offset);           // 检查页是否空闲
 }
 
 /**
  * TODO: Student Implement
  */
 page_id_t DiskManager::MapPageId(page_id_t logical_page_id) {
-  uint32_t num_extents = logical_page_id / BITMAP_SIZE; // 计算逻辑页所在的 extent 编号
-  uint32_t page_offset = logical_page_id % BITMAP_SIZE; // 计算逻辑页在 extent 中的偏移量
-  return num_extents * (BITMAP_SIZE + 1) + 1 + page_offset + 1; // 加上 disk_file_meta 和 bitmap_page
+  uint32_t num_extents = logical_page_id / BITMAP_SIZE;          // 计算逻辑页所在的 extent 编号
+  uint32_t page_offset = logical_page_id % BITMAP_SIZE;          // 计算逻辑页在 extent 中的偏移量
+  return num_extents * (BITMAP_SIZE + 1) + 1 + page_offset + 1;  // 加上 disk_file_meta 和 bitmap_page
 }
 
 int DiskManager::GetFileSize(const std::string &file_name) {

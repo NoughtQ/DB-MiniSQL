@@ -2,9 +2,9 @@
 #define MINISQL_CLOCK_REPLACER_H
 
 #include <algorithm>
+#include <map>
 #include <mutex>
 #include <unordered_set>
-#include <map>
 #include <vector>
 
 #include "buffer/replacer.h"
@@ -38,7 +38,7 @@ class CLOCKReplacer : public Replacer {
 
  private:
   size_t capacity;
-  vector<pair<bool,bool>> clock_list_;    // <ref bit, invalid bit>
+  vector<pair<bool, bool>> clock_list_;  // <ref bit, invalid bit>
   map<size_t, frame_id_t> clock_map_;
   size_t clock_hand_;
 };
