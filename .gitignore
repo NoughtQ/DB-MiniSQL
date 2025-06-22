@@ -2,10 +2,14 @@ bin/
 build/
 dbfiles/
 datas/
+report/
+sql_gen/
 .vscode/
 .idea/
 cmake-build-debug/
 cmake-build-release/
+thirdparty/
+tests_for_minisql/
 .trae/
 .DS_Store
 .gdb_history
